@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "macros.html" import kpi, badge, filtros, tabla %}
+
+{% block titulo %}Auditoría{% endblock %}
+{% block encabezado %}Auditoría{% endblock %}
+{% block subtitulo %}Registro histórico de acciones y eventos críticos realizados en la plataforma.{% endblock %}
+
+{% block acciones %}
+  <a class="btn btn--claro" href="#">Exportar reporte</a>
+{% endblock %}
+
+{% block contenido %}
+
+<div class="kpis">
+  {{ kpi('Eventos totales', '1,284', nota='hoy') }}
+  {{ kpi('Acciones críticas', criticas, delta='Revisar', tendencia='alerta') }}
+  {{ kpi('Accesos fallidos', fallidos, delta='RF-A07', tendencia='sube', nota='bloqueo por intentos') }}
+  {{ kpi('Usuarios activos', 12, nota='en sesión') }}
+</div>
+
+{{ filtros([
+  {'tipo': 'busqueda', 'etiqueta': 'Buscar', 'placeholder': 'Buscar por ID, usuario o IP...'},
+  {'tipo': 'select', 'etiqueta': 'Usuario', 'opciones': ['Todos', 'Ricardo Smith', 'Ana Lee', 'Marcos García']},
+  {'tipo': 'select', 'etiqueta': 'Módulo', 'opciones': ['Todos', 'Sesión', 'Usuarios', 'Simulaciones', 'Reportes', 'Enfermedades']},
+  {'tipo': 'select', 'etiqueta': 'Acción', 'opciones': ['Todas', 'Login', 'Alta', 'Edición', 'Ejecución', 'Exportación']}
+]) }}
+
+{% call tabla('Bitácora de auditoría',
+              ['ID DE REGISTRO', 'FECHA Y HORA', 'USUARIO', 'MÓDULO', 'ACCIÓN', 'DESCRIPCIÓN', 'DIRECCIÓN IP', 'ESTADO'],
+              total=1284, mostrando=eventos|length, paginas=4) %}
+  {% for e in eventos %}
+  <tr>
+    <td class="suave">{{ e.id }}</td>
+    <td class="suave">{{ e.fecha }}</td>
+    <td class="fuerte">{{ e.usuario }}</td>
+    <td>{{ e.modulo }}</td>
+    <td>{{ e.accion }}</td>
+    <td class="suave">{{ e.descripcion }}</td>
+    <td class="suave">{{ e.ip }}</td>
+    <td>{{ badge(e.estado) }}</td>
+  </tr>
+  {% endfor %}
+{% endcall %}
+
+{% endblock %}

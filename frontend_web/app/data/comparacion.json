@@ -1,0 +1,132 @@
+{
+  "simulacion": {
+    "id": "SIM-2026-0842",
+    "enfermedad": "Influenza A",
+    "fecha": "2026-08-31",
+    "analista": "Ricardo Smith",
+    "poblacion": "1.25M",
+    "estado": "Completada"
+  },
+  "metricas": {
+    "error_promedio": {
+      "valor": "4.2%",
+      "delta": "-0.5%",
+      "tendencia": "baja"
+    },
+    "desviacion_maxima": {
+      "valor": "125",
+      "nota": "casos"
+    },
+    "precision": {
+      "valor": "95.8%",
+      "delta": "Optimo",
+      "tendencia": "neutra"
+    },
+    "diferencia_total": {
+      "valor": "-234",
+      "nota": "casos"
+    }
+  },
+  "semanas": [
+    "Semana 32",
+    "Semana 33",
+    "Semana 34",
+    "Semana 35",
+    "Semana 36",
+    "Semana 37",
+    "Semana 38",
+    "Semana 39"
+  ],
+  "simulados": [
+    120,
+    145,
+    180,
+    215,
+    240,
+    262,
+    255,
+    238
+  ],
+  "reales": [
+    125,
+    190,
+    210,
+    200,
+    232,
+    251,
+    268,
+    244
+  ],
+  "detalle": [
+    {
+      "semana": "Semana 32",
+      "simulados": 120,
+      "reales": 125,
+      "diferencia": 5,
+      "porcentaje": 4.2,
+      "estado": "Tolerable"
+    },
+    {
+      "semana": "Semana 33",
+      "simulados": 145,
+      "reales": 190,
+      "diferencia": 45,
+      "porcentaje": 31.0,
+      "estado": "Desviacion"
+    },
+    {
+      "semana": "Semana 34",
+      "simulados": 180,
+      "reales": 210,
+      "diferencia": 30,
+      "porcentaje": 16.7,
+      "estado": "Atencion"
+    },
+    {
+      "semana": "Semana 35",
+      "simulados": 215,
+      "reales": 200,
+      "diferencia": -15,
+      "porcentaje": -7.0,
+      "estado": "Tolerable"
+    },
+    {
+      "semana": "Semana 36",
+      "simulados": 240,
+      "reales": 232,
+      "diferencia": -8,
+      "porcentaje": -3.3,
+      "estado": "Tolerable"
+    },
+    {
+      "semana": "Semana 37",
+      "simulados": 262,
+      "reales": 251,
+      "diferencia": -11,
+      "porcentaje": -4.2,
+      "estado": "Tolerable"
+    },
+    {
+      "semana": "Semana 38",
+      "simulados": 255,
+      "reales": 268,
+      "diferencia": 13,
+      "porcentaje": 5.1,
+      "estado": "Tolerable"
+    },
+    {
+      "semana": "Semana 39",
+      "simulados": 238,
+      "reales": 244,
+      "diferencia": 6,
+      "porcentaje": 2.5,
+      "estado": "Tolerable"
+    }
+  ],
+  "analisis": [
+    "La simulacion subestimo los casos durante la segunda semana del periodo, con una brecha de 45 casos.",
+    "El comportamiento observado empezo a separarse de la proyeccion a partir del 18 de agosto.",
+    "La baja predicha por el modelo se retraso cerca de 1.5 semanas frente a la realidad clinica.",
+    "Conviene ajustar la tasa de infeccion (beta) en las proximas iteraciones para este municipio."
+  ]
+}

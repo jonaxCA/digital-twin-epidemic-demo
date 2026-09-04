@@ -1,0 +1,151 @@
+{
+  "notas": [
+    {
+      "tipo": "sube",
+      "titulo": "Tendencia geografica",
+      "texto": "El mayor incremento (+12%) se registra en la zona norte durante los ultimos 7 dias."
+    },
+    {
+      "tipo": "baja",
+      "titulo": "Incidencia global",
+      "texto": "La incidencia general disminuyo 4.2% respecto al periodo anterior."
+    },
+    {
+      "tipo": "alerta",
+      "titulo": "Poblacion critica",
+      "texto": "El grupo de 65 anos o mas concentra el mayor riesgo."
+    }
+  ],
+  "fechas": [
+    "2026-08-01",
+    "2026-08-02",
+    "2026-08-03",
+    "2026-08-04",
+    "2026-08-05",
+    "2026-08-06",
+    "2026-08-07",
+    "2026-08-08",
+    "2026-08-09",
+    "2026-08-10",
+    "2026-08-11",
+    "2026-08-12",
+    "2026-08-13",
+    "2026-08-14",
+    "2026-08-15",
+    "2026-08-16",
+    "2026-08-17",
+    "2026-08-18",
+    "2026-08-19",
+    "2026-08-20",
+    "2026-08-21",
+    "2026-08-22",
+    "2026-08-23",
+    "2026-08-24",
+    "2026-08-25",
+    "2026-08-26",
+    "2026-08-27",
+    "2026-08-28",
+    "2026-08-29",
+    "2026-08-30"
+  ],
+  "casos_diarios": [
+    0,
+    0,
+    1,
+    1,
+    2,
+    4,
+    5,
+    8,
+    12,
+    17,
+    25,
+    36,
+    51,
+    72,
+    100,
+    139,
+    191,
+    261,
+    351,
+    467,
+    616,
+    804,
+    1039,
+    1333,
+    1695,
+    2139,
+    2677,
+    3323,
+    4086,
+    4969
+  ],
+  "incidencia_acumulada": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.1,
+    0.1,
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5,
+    0.8,
+    1.1,
+    1.6,
+    2.2,
+    3.1,
+    4.3,
+    5.9,
+    8.1,
+    11.0,
+    14.7,
+    19.5,
+    25.7,
+    33.5,
+    43.4,
+    55.8,
+    71.2,
+    90.2
+  ],
+  "grupo_etario": [
+    {
+      "grupo": "0-14 anos",
+      "casos": 120
+    },
+    {
+      "grupo": "15-24 anos",
+      "casos": 245
+    },
+    {
+      "grupo": "25-44 anos",
+      "casos": 850
+    },
+    {
+      "grupo": "45-64 anos",
+      "casos": 640
+    },
+    {
+      "grupo": "65+ anos",
+      "casos": 920
+    }
+  ],
+  "sexo": [
+    {
+      "nombre": "Mujeres",
+      "valor": 49.9
+    },
+    {
+      "nombre": "Hombres",
+      "valor": 47.3
+    },
+    {
+      "nombre": "No especificado",
+      "valor": 2.8
+    }
+  ]
+}

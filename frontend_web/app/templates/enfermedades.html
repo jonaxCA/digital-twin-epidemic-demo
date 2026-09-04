@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "macros.html" import kpi, badge, filtros, tabla %}
+
+{% block titulo %}Catálogo de enfermedades{% endblock %}
+{% block encabezado %}Catálogo de enfermedades{% endblock %}
+{% block subtitulo %}Administra las enfermedades disponibles para el monitoreo y las simulaciones.{% endblock %}
+
+{% block acciones %}
+  <a class="btn btn--claro" href="#">Exportar</a>
+  {% if puede('catalogos:escribir') %}
+    <a class="btn btn--primario" href="#">Nueva enfermedad</a>
+  {% endif %}
+{% endblock %}
+
+{% block contenido %}
+
+<div class="kpis">
+  {{ kpi('Registradas', total, delta='+2', tendencia='neutra', nota='este mes') }}
+  {{ kpi('Activas', activas, delta=(activas * 100 // total)|string + '%', tendencia='baja', nota='del total') }}
+  {{ kpi('Inactivas', inactivas, nota='fuera de vigilancia') }}
+  {{ kpi('Detectadas recientemente', 3, delta='Últimos 30 días', tendencia='alerta') }}
+</div>
+
+{{ filtros([
+  {'tipo': 'busqueda', 'etiqueta': 'Búsqueda', 'placeholder': 'Buscar por nombre o código...'},
+  {'tipo': 'select', 'etiqueta': 'Estado', 'opciones': ['Todos', 'Activa', 'Inactiva']},
+  {'tipo': 'select', 'etiqueta': 'Nivel de riesgo', 'opciones': ['Todos', 'Crítico', 'Alto', 'Moderado', 'Bajo']},
+  {'tipo': 'select', 'etiqueta': 'Tipo', 'opciones': ['Todas', 'Viral', 'Bacteriana', 'Parasitaria']}
+]) }}
+
+{% call tabla('Enfermedades registradas',
+              ['CÓDIGO', 'ENFERMEDAD', 'AGENTE', 'TIPO', 'R0', 'RIESGO', 'ESTADO', 'ÚLTIMA ACT.', ''],
+              total=total, mostrando=enfermedades|length) %}
+  {% for e in enfermedades %}
+  <tr>
+    <td class="suave">{{ e.codigo }}</td>
+    <td class="fuerte">{{ e.nombre }}</td>
+    <td class="suave">{{ e.agente }}</td>
+    <td>{{ e.tipo }}</td>
+    <td class="num">{{ e.r0 }}</td>
+    <td>{{ badge(e.riesgo) }}</td>
+    <td>{{ badge(e.estado, punto=true) }}</td>
+    <td class="suave">{{ e.actualizado }}</td>
+    <td><button class="acciones-fila" type="button" aria-label="Acciones">⋮</button></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="9"><div class="vacio">Todavía no hay enfermedades registradas.</div></td></tr>
+  {% endfor %}
+{% endcall %}
+
+{% endblock %}

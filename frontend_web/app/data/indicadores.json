@@ -1,0 +1,13 @@
+{
+  "casos_activos": {"valor": "24,592", "delta": "+12%", "tendencia": "sube", "nota": "vs sem. anterior"},
+  "tasa_incidencia": {"valor": "14.2%", "delta": "-2.4%", "tendencia": "baja", "nota": "vs sem. anterior"},
+  "zonas_riesgo": {"valor": "18", "delta": "Critico", "tendencia": "alerta", "nota": "Requieren atencion"},
+  "simulaciones": {"valor": "142", "delta": "Activas", "tendencia": "neutra", "nota": "En ejecucion"},
+  "resumen": [
+    {"enfermedad": "Influenza A", "estado": "Critico", "incidencia": "4.2k"},
+    {"enfermedad": "Dengue", "estado": "Alerta", "incidencia": "1.8k"},
+    {"enfermedad": "COVID-19", "estado": "Estable", "incidencia": "842"},
+    {"enfermedad": "Zika", "estado": "Estable", "incidencia": "124"},
+    {"enfermedad": "Malaria", "estado": "Alerta", "incidencia": "412"}
+  ]
+}

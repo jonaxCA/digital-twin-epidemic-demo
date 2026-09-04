@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "macros.html" import kpi, badge, filtros, tabla %}
+
+{% block titulo %}Gestión de usuarios{% endblock %}
+{% block encabezado %}Gestión de usuarios{% endblock %}
+{% block subtitulo %}Administra los accesos, roles y permisos de los usuarios del sistema.{% endblock %}
+
+{% block acciones %}
+  <a class="btn btn--claro" href="#">Exportar</a>
+  <a class="btn btn--primario" href="#">Nuevo usuario</a>
+{% endblock %}
+
+{% block contenido %}
+
+<div class="kpis">
+  {{ kpi('Total usuarios', total) }}
+  {{ kpi('Activos', activos, nota='con acceso vigente') }}
+  {{ kpi('Pendientes', pendientes, delta='Por activar', tendencia='alerta') }}
+  {{ kpi('Inactivos', inactivos, nota='baja lógica') }}
+</div>
+
+{{ filtros([
+  {'tipo': 'busqueda', 'etiqueta': 'Buscar', 'placeholder': 'Buscar por nombre, correo o ID...'},
+  {'tipo': 'select', 'etiqueta': 'Rol', 'opciones': ['Todos'] + roles.values()|list},
+  {'tipo': 'select', 'etiqueta': 'Departamento', 'opciones': ['Todos', 'Vigilancia', 'Modelado', 'Campo', 'Sistemas']},
+  {'tipo': 'select', 'etiqueta': 'Estado', 'opciones': ['Todos', 'Activo', 'Pendiente', 'Inactivo']}
+]) }}
+
+{% call tabla('Usuarios del sistema',
+              ['ID', 'NOMBRE', 'CORREO', 'ROL', 'DEPARTAMENTO', 'ESTADO', 'ÚLTIMO ACCESO', ''],
+              total=total, mostrando=usuarios|length) %}
+  {% for u in usuarios %}
+  <tr>
+    <td class="suave">{{ u.id }}</td>
+    <td class="fuerte">{{ u.nombre }}</td>
+    <td class="suave">{{ u.correo }}</td>
+    <td>{{ roles.get(u.rol, u.rol) }}</td>
+    <td>{{ u.departamento }}</td>
+    <td>{{ badge(u.estado, punto=true) }}</td>
+    <td class="suave">{{ u.ultimo_acceso }}</td>
+    <td><button class="acciones-fila" type="button" aria-label="Acciones">⋮</button></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="8"><div class="vacio">No hay usuarios que coincidan con el filtro.</div></td></tr>
+  {% endfor %}
+{% endcall %}
+
+{% endblock %}

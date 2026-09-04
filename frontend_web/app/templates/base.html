@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}EPIDEMIA{% endblock %} · EPIDEMIA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+  {% block cabeza %}{% endblock %}
+</head>
+<body>
+<div class="app">
+
+  {# ===== SIDEBAR ===== #}
+  <aside class="sidebar">
+    <div class="sidebar__marca">
+      <a class="sidebar__logo" href="{{ url_for('main.dashboard') }}">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true">
+          <path d="M12 6a6 6 0 100 12 6 6 0 000-12zm0 2.5a3.5 3.5 0 110 7 3.5 3.5 0 010-7z"/>
+          <path d="M11 1h2v3.5h-2zm0 18.5h2V23h-2zM1 11h3.5v2H1zm18.5 0H23v2h-3.5zM4.2 2.8l2.5 2.5-1.4 1.4-2.5-2.5zm12.6 12.6l2.5 2.5-1.4 1.4-2.5-2.5zM19.8 2.8l1.4 1.4-2.5 2.5-1.4-1.4zM6.7 15.4l1.4 1.4-2.5 2.5-1.4-1.4z"/>
+        </svg>
+        EPIDEMIA
+      </a>
+      <div class="sidebar__sub">Monitoreo epidemiológico</div>
+    </div>
+
+    <nav class="sidebar__nav">
+      {% set actual = request.endpoint %}
+
+      <a class="sidebar__item {{ 'sidebar__item--activo' if actual == 'main.dashboard' }}"
+         href="{{ url_for('main.dashboard') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+        <span>Dashboard</span>
+      </a>
+
+      {% if puede('monitoreo:ver') %}
+      <a class="sidebar__item {{ 'sidebar__item--activo' if actual == 'main.monitoreo' }}"
+         href="{{ url_for('main.monitoreo') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M3 20V10M8.5 20V4M14 20v-7M19.5 20V7"/>
+        </svg>
+        <span>Monitoreo</span>
+      </a>
+      {% endif %}
+
+      {% if puede('simulaciones:ver') %}
+      <a class="sidebar__item {{ 'sidebar__item--activo' if actual == 'main.simulaciones' }}"
+         href="{{ url_for('main.simulaciones') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.9 4.9l2.9 2.9M16.2 16.2l2.9 2.9M2 12h4M18 12h4"/>
+        </svg>
+        <span>Simulaciones</span>
+      </a>
+      {% endif %}
+
+      {% if puede('comparacion:ver') %}
+      <a class="sidebar__item {{ 'sidebar__item--activo' if actual == 'main.comparacion' }}"
+         href="{{ url_for('main.comparacion') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M16 3l4 4-4 4M20 7H8M8 21l-4-4 4-4M4 17h12"/>
+        </svg>
+        <span>Comparación</span>
+      </a>
+      {% endif %}
+
+      {% if puede('mapa:ver') %}
+      <a class="sidebar__item {{ 'sidebar__item--activo' if actual == 'main.mapa' }}"
+         href="{{ url_for('main.mapa') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+          <path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>
+        </svg>
+        <span>Mapa epidemiológico</span>
+      </a>
+      {% endif %}
+
+      {% if puede('catalogos:leer') %}
+      <a class="sidebar__item {{ 'sidebar__item--activo' if actual == 'main.enfermedades' }}"
+         href="{{ url_for('main.enfermedades') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>
+        </svg>
+        <span>Enfermedades</span>
+      </a>
+      {% endif %}
+
+      {% if puede('usuarios:leer') %}
+      <a class="sidebar__item {{ 'sidebar__item--activo' if actual == 'main.usuarios' }}"
+         href="{{ url_for('main.usuarios') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M16 20v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
+          <path d="M22 20v-2a4 4 0 00-3-3.87M16 3.13A4 4 0 0119 7"/>
+        </svg>
+        <span>Usuarios</span>
+      </a>
+      {% endif %}
+
+      {% if puede('auditoria:ver') %}
+      <a class="sidebar__item {{ 'sidebar__item--activo' if actual == 'main.auditoria' }}"
+         href="{{ url_for('main.auditoria') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M3 6h12M3 12h8M3 18h10M17 15l2 2 4-4"/>
+        </svg>
+        <span>Auditoría</span>
+      </a>
+      {% endif %}
+
+      {% if not session.usuario %}
+      <a class="sidebar__item" href="{{ url_for('main.login') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/>
+        </svg>
+        <span>Iniciar sesión</span>
+      </a>
+      {% endif %}
+    </nav>
+
+    {% if session.usuario %}
+    <div class="sidebar__pie">
+      Sesión activa como {{ session.nombre }}
+      · <a href="{{ url_for('main.logout') }}">Cerrar sesión</a>
+    </div>
+    {% endif %}
+  </aside>
+
+  {# ===== PRINCIPAL ===== #}
+  <div class="principal">
+    <header class="topbar">
+      {% block estado_topbar %}{% endblock %}
+
+      {% if session.usuario %}
+        <a class="topbar__icono" href="#" aria-label="Notificaciones">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/>
+          </svg>
+          <span class="topbar__alerta"></span>
+        </a>
+        <div class="topbar__perfil">
+          <div class="topbar__avatar">{{ session.nombre[:1]|upper }}</div>
+          <div>
+            <div class="topbar__nombre">{{ session.nombre }}</div>
+            <div class="topbar__rol">{{ session.rol|title }}</div>
+          </div>
+        </div>
+      {% endif %}
+    </header>
+
+    <main class="contenido">
+      {% with mensajes = get_flashed_messages(with_categories=true) %}
+        {% if mensajes %}
+          <div class="avisos">
+            {% for categoria, texto in mensajes %}
+              <div class="aviso aviso--{{ 'error' if categoria == 'error' else 'ok' }}">{{ texto }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <div class="pagina__encabezado">
+        <div>
+          <h1>{% block encabezado %}{% endblock %}</h1>
+          <p>{% block subtitulo %}{% endblock %}</p>
+        </div>
+        <div class="pagina__acciones">{% block acciones %}{% endblock %}</div>
+      </div>
+
+      {% block contenido %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

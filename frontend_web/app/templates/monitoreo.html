@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% from "macros.html" import badge, filtros, tabla %}
+
+{% block titulo %}Análisis epidemiológico{% endblock %}
+{% block encabezado %}Análisis epidemiológico{% endblock %}
+{% block subtitulo %}Explora la evolución de los indicadores por tiempo, ubicación y características demográficas.{% endblock %}
+
+{% block acciones %}
+  <a class="btn btn--claro" href="#">Compartir</a>
+  <a class="btn btn--claro" href="#">Exportar</a>
+{% endblock %}
+
+{% block contenido %}
+
+{{ filtros([
+  {'tipo': 'select', 'etiqueta': 'Enfermedad', 'opciones': enfermedades | map(attribute='nombre') | list},
+  {'tipo': 'select', 'etiqueta': 'Indicador', 'opciones': ['Incidencia', 'Casos confirmados', 'Hospitalizados', 'Defunciones']},
+  {'tipo': 'select', 'etiqueta': 'Municipio', 'opciones': ['Todos los municipios'] + zonas | map(attribute='nombre') | list},
+  {'tipo': 'select', 'etiqueta': 'Periodo', 'opciones': ['7 días', '30 días', '90 días']}
+]) }}
+
+<div class="notas">
+  {% for nota in datos.notas %}
+  <div class="nota nota--{{ nota.tipo }}">
+    <div class="nota__titulo">{{ nota.titulo }}</div>
+    <div class="nota__texto">{{ nota.texto }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<section class="tarjeta" style="margin-bottom:22px">
+  <div class="tarjeta__cabecera">
+    <h2>Evolución temporal de casos e incidencia</h2>
+    <div class="segmentos">
+      <button class="segmento segmento--activo" type="button" data-tipo="line">Línea</button>
+      <button class="segmento" type="button" data-tipo="column">Columna</button>
+      <button class="segmento" type="button" data-tipo="area">Área</button>
+    </div>
+  </div>
+  <div class="tarjeta__cuerpo">
+    <div id="grafica-evolucion" class="grafica grafica--alta"></div>
+  </div>
+</section>
+
+<div class="rejilla-mitades">
+  <section class="tarjeta">
+    <div class="tarjeta__cabecera"><h2>Distribución por grupo etario</h2></div>
+    <div class="tarjeta__cuerpo"><div id="grafica-edad" class="grafica grafica--baja"></div></div>
+  </section>
+
+  <section class="tarjeta">
+    <div class="tarjeta__cabecera"><h2>Distribución por sexo</h2></div>
+    <div class="tarjeta__cuerpo"><div id="grafica-sexo" class="grafica grafica--baja"></div></div>
+  </section>
+</div>
+
+{% call tabla('Detalle por zona geográfica',
+              ['ZONA', 'MUNICIPIO', 'CASOS', 'INCIDENCIA / 100K', 'VARIACIÓN (7D)', 'HOSPITALIZADOS', 'ESTADO'],
+              total=24, mostrando=zonas|length) %}
+  {% for z in zonas %}
+  <tr>
+    <td class="fuerte">{{ z.zona }}</td>
+    <td class="suave">{{ z.nombre }}</td>
+    <td class="num">{{ '{:,}'.format(z.casos) }}</td>
+    <td class="num">{{ z.incidencia }}</td>
+    <td class="num {{ 'sube' if z.variacion > 0 else 'baja' }}">
+      {{ '+' if z.variacion > 0 }}{{ z.variacion }}%
+    </td>
+    <td class="num">{{ z.hospitalizados }}</td>
+    <td>{{ badge(z.estado) }}</td>
+  </tr>
+  {% endfor %}
+{% endcall %}
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://code.highcharts.com/highcharts.js"></script>
+<script src="{{ url_for('static', filename='js/graficas.js') }}"></script>
+<script>
+  const datosMonitoreo = {{ datos | tojson }};
+  evolucionTemporal('grafica-evolucion', datosMonitoreo);
+  distribucionEtaria('grafica-edad', datosMonitoreo.grupo_etario);
+  distribucionSexo('grafica-sexo', datosMonitoreo.sexo);
+
+  document.querySelectorAll('.segmento').forEach(function (boton) {
+    boton.addEventListener('click', function () {
+      document.querySelectorAll('.segmento').forEach(function (b) {
+        b.classList.remove('segmento--activo');
+      });
+      boton.classList.add('segmento--activo');
+      evolucionTemporal('grafica-evolucion', datosMonitoreo, boton.dataset.tipo);
+    });
+  });
+</script>
+{% endblock %}

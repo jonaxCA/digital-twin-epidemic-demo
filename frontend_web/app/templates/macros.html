@@ -1,0 +1,134 @@
+{# =========================================================================
+   Macros reutilizables. Todas las pantallas se arman con estos cuatro.
+   ========================================================================= #}
+
+
+{# --- Tarjeta de indicador ------------------------------------------------
+   kpi("Casos activos", "24,592", delta="+12%", tendencia="sube",
+       nota="vs sem. anterior")
+   tendencia: sube | baja | alerta | neutra
+-------------------------------------------------------------------------- #}
+{% macro kpi(titulo, valor, delta=None, tendencia='neutra', nota=None, icono=None) %}
+<div class="kpi">
+  <div class="kpi__fila">
+    <div class="kpi__titulo">{{ titulo }}</div>
+    {% if icono %}<div class="kpi__icono">{{ icono }}</div>{% endif %}
+  </div>
+  <div class="kpi__valor">{{ valor }}</div>
+  {% if delta or nota %}
+  <div class="kpi__pie">
+    {% if delta %}
+      {% set clase = {'sube': 'critico', 'baja': 'estable',
+                      'alerta': 'alerta', 'neutra': 'info'}[tendencia] %}
+      <span class="badge badge--{{ clase }}">{{ delta }}</span>
+    {% endif %}
+    {% if nota %}<span>{{ nota }}</span>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+
+{# --- Badge de estado -----------------------------------------------------
+   Traduce el texto del dato al color correcto sin repetir if en cada plantilla.
+-------------------------------------------------------------------------- #}
+{% macro badge(texto, punto=false) %}
+  {% set mapa = {
+    'critico': 'critico', 'crítico': 'critico', 'error': 'critico',
+    'fallido': 'critico', 'desviacion': 'critico', 'desviación': 'critico',
+    'alerta': 'alerta', 'alto': 'alerta', 'pendiente': 'alerta',
+    'atencion': 'alerta', 'atención': 'alerta',
+    'estable': 'estable', 'activa': 'estable', 'activo': 'estable',
+    'completada': 'estable', 'exitoso': 'estable', 'tolerable': 'estable',
+    'optimo': 'estable', 'óptimo': 'estable', 'bajo': 'estable',
+    'moderado': 'info', 'en ejecucion': 'info', 'en ejecución': 'info',
+    'sincronizado': 'info'
+  } %}
+  {% set clave = texto|lower %}
+  {% set tipo = mapa.get(clave, 'neutro') %}
+  <span class="badge badge--{{ tipo }}">
+    {% if punto %}<span class="badge__punto"></span>{% endif %}{{ texto }}
+  </span>
+{% endmacro %}
+
+
+{# --- Barra de filtros ----------------------------------------------------
+   filtros([
+     {'tipo': 'busqueda', 'etiqueta': 'Búsqueda', 'placeholder': 'Buscar...'},
+     {'tipo': 'select', 'etiqueta': 'Estado', 'opciones': ['Todos', 'Activa']}
+   ])
+   Los filtros son visuales en esta entrega: el submit se conecta cuando
+   exista la API con query params.
+-------------------------------------------------------------------------- #}
+{% macro filtros(campos, accion='') %}
+<form class="filtros" method="get" action="{{ accion }}">
+  {% for campo in campos %}
+    {% if campo.tipo == 'busqueda' %}
+      <div class="campo campo--ancho campo--busqueda">
+        <label class="campo__etiqueta" for="f-{{ loop.index }}">{{ campo.etiqueta }}</label>
+        <span class="campo__lupa">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>
+          </svg>
+        </span>
+        <input class="entrada" id="f-{{ loop.index }}" type="search"
+               name="{{ campo.nombre|default('q') }}"
+               placeholder="{{ campo.placeholder|default('Buscar...') }}">
+      </div>
+    {% else %}
+      <div class="campo">
+        <label class="campo__etiqueta" for="f-{{ loop.index }}">{{ campo.etiqueta }}</label>
+        <select class="select" id="f-{{ loop.index }}" name="{{ campo.nombre|default(campo.etiqueta|lower) }}">
+          {% for opcion in campo.opciones %}<option>{{ opcion }}</option>{% endfor %}
+        </select>
+      </div>
+    {% endif %}
+  {% endfor %}
+  <div class="filtros__botones">
+    <button class="btn btn--claro" type="reset">Limpiar</button>
+    <button class="btn btn--oscuro" type="submit">Aplicar</button>
+  </div>
+</form>
+{% endmacro %}
+
+
+{# --- Tarjeta con tabla ---------------------------------------------------
+   Se usa con call:
+
+   {% call tabla('Enfermedades registradas', ['CÓDIGO', 'NOMBRE'], total=24) %}
+     <tr><td>...</td></tr>
+   {% endcall %}
+-------------------------------------------------------------------------- #}
+{% macro tabla(titulo, columnas, total=None, mostrando=None, paginas=3) %}
+<section class="tarjeta">
+  {% if titulo %}
+  <div class="tarjeta__cabecera">
+    <h2>{{ titulo }}</h2>
+  </div>
+  {% endif %}
+
+  <div class="tabla-scroll">
+    <table class="tabla">
+      <thead>
+        <tr>{% for columna in columnas %}<th>{{ columna }}</th>{% endfor %}</tr>
+      </thead>
+      <tbody>
+        {{ caller() }}
+      </tbody>
+    </table>
+  </div>
+
+  {% if total %}
+  <div class="paginacion">
+    <span>Mostrando {{ mostrando|default(total) }} de {{ total }} registros</span>
+    <div class="paginacion__paginas">
+      <button class="paginacion__pagina" type="button" aria-label="Anterior">‹</button>
+      {% for n in range(1, paginas + 1) %}
+        <button class="paginacion__pagina {{ 'paginacion__pagina--activa' if n == 1 }}" type="button">{{ n }}</button>
+      {% endfor %}
+      <button class="paginacion__pagina" type="button" aria-label="Siguiente">›</button>
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% endmacro %}
