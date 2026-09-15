@@ -1,0 +1,96 @@
+{% extends "base_app.html" %}
+{% block title %}Auditoría{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Auditoría</h1>
+    <p class="subtitle">Registro histórico de acciones y eventos críticos realizados en la plataforma.</p>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="card stat-card">
+    <div class="stat-label"><span>EVENTOS TOTALES</span></div>
+    <div class="stat-value">{{ "{:,}".format(resumen.eventos_totales) }}</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-label"><span>ACCESOS DENEGADOS</span></div>
+    <div class="stat-value">{{ resumen.criticas }}</div>
+    <div class="stat-trend"><span class="trend-badge trend-up">Revisar</span></div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-label"><span>LOGINS FALLIDOS</span></div>
+    <div class="stat-value">{{ resumen.fallidos }}</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-label"><span>USUARIOS CON LOGIN (24H)</span></div>
+    <div class="stat-value">{{ resumen.activos_24h }}</div>
+    <div class="stat-trend"><span>aprox. -- no hay tabla de sesiones</span></div>
+  </div>
+</div>
+
+<form class="mapa-filtros" method="get">
+  <div class="field">
+    <label for="q">Buscar</label>
+    <input type="text" id="q" name="q" value="{{ filtro_q }}" placeholder="Usuario, IP o módulo...">
+  </div>
+  <div class="field">
+    <label for="usuario">Usuario</label>
+    <select id="usuario" name="usuario">
+      <option value="">Todos</option>
+      {% for u in usuarios_filtro %}
+      <option value="{{ u.id }}" {{ 'selected' if filtro_usuario == u.id else '' }}>{{ u.full_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="modulo">Módulo</label>
+    <select id="modulo" name="modulo">
+      <option value="">Todos</option>
+      {% for m in modulos %}
+      <option value="{{ m }}" {{ 'selected' if filtro_modulo == m else '' }}>{{ m }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="accion">Acción</label>
+    <select id="accion" name="accion">
+      <option value="">Todas</option>
+      {% for a in acciones %}
+      <option value="{{ a }}" {{ 'selected' if filtro_accion == a else '' }}>{{ a }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn btn-primary">Filtrar</button>
+  <a href="{{ url_for('auditoria') }}" class="btn">Restablecer</a>
+</form>
+
+<div class="card">
+  <div class="card-header">
+    <div>
+      <h3>Bitácora de auditoría</h3>
+      <p class="subtitle">Últimos {{ eventos|length }} eventos (real, generado por el uso de esta app)</p>
+    </div>
+  </div>
+  <table class="situacion-table">
+    <thead>
+      <tr><th>Fecha y hora</th><th>Usuario</th><th>Módulo</th><th>Acción</th><th>Descripción</th><th>IP</th><th>Estado</th></tr>
+    </thead>
+    <tbody>
+      {% for e in eventos %}
+      <tr>
+        <td class="suave">{{ e.fecha }}</td>
+        <td class="fuerte">{{ e.usuario }}</td>
+        <td>{{ e.modulo }}</td>
+        <td>{{ e.accion }}</td>
+        <td class="suave">{{ e.descripcion }}</td>
+        <td class="suave">{{ e.ip }}</td>
+        <td><span class="badge badge-{{ e.estado|lower }}">{{ e.estado }}</span></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7"><div class="vacio">Todavía no hay eventos registrados. Inicia sesión o exporta un reporte para generar el primero.</div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

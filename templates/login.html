@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Iniciar Sesión · EPIDEMIA</title>
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet" />
+  <link href="{{ url_for('static', filename='css/styles.css') }}" rel="stylesheet" />
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-card">
+      <div class="logo-badge">⚕</div>
+      <h1>EPIDEMIA</h1>
+      <p class="login-subtitle">Sistema Monolítico v0.1</p>
+
+      {% if error %}
+      <div class="login-error">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" action="{{ url_for('login', next=request.args.get('next')) }}">
+        <div class="field">
+          <label for="usuario">Usuario o Correo Electrónico</label>
+          <input type="text" id="usuario" name="usuario" placeholder="ej. d.hernandez@salud.gov"
+                 value="{{ usuario }}" autofocus required>
+        </div>
+        <div class="field">
+          <label for="password">Contraseña</label>
+          <input type="password" id="password" name="password" placeholder="••••••••" required>
+        </div>
+        <div class="field-row">
+          <label><input type="checkbox" name="mantener"> Mantener sesión iniciada</label>
+          <a class="forgot-link" href="#" title="Próximamente" onclick="return false;">Olvidé mi contraseña</a>
+        </div>
+        <button type="submit" class="btn-login">Iniciar Sesión →</button>
+      </form>
+
+      <div class="login-notice">
+        ℹ️ Acceso restringido. Este sistema está monitoreado bajo los protocolos de seguridad de Salud Pública.
+      </div>
+
+      <div class="demo-hint">
+        Datos de demostración — usuario: <strong>diana.flores</strong> · password: <strong>Epidemia2026!</strong>
+      </div>
+    </div>
+    <div class="login-footer">
+      © 2026 EPIDEMIA Surveillance Systems. All Rights Reserved.
+      <div class="footer-links">
+        <a href="#" onclick="return false;">Privacy Policy</a>
+        <a href="#" onclick="return false;">Security Protocol</a>
+        <a href="#" onclick="return false;">Contact Support</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

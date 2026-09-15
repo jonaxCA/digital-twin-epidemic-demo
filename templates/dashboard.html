@@ -1,0 +1,22 @@
+{% extends "base_app.html" %}
+{% block title %}Panorama Epidemiológico{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Panorama Epidemiológico</h1>
+    <p class="subtitle">Resumen de indicadores críticos y zonas de riesgo activo · Nuevo León</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{{ url_for('export_resumen_csv') }}">⬇ Exportar CSV</a>
+    <a class="btn btn-primary" href="{{ url_for('reporte_nuevo') }}">+ Nuevo Reporte</a>
+  </div>
+</div>
+
+{% with mensajes = get_flashed_messages(with_categories=true) %}
+  {% for categoria, mensaje in mensajes %}
+  <div class="alert alert-{{ 'error' if categoria == 'error' else 'ok' }}">{{ mensaje }}</div>
+  {% endfor %}
+{% endwith %}
+
+{% include "_panorama.html" %}
+{% endblock %}

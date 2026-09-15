@@ -1,0 +1,60 @@
+{% extends "base_app.html" %}
+{% block title %}Nueva enfermedad{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Nueva enfermedad</h1>
+    <p class="subtitle">Registra un padecimiento en el catálogo para que pueda usarse en el
+      monitoreo y en las simulaciones.</p>
+  </div>
+</div>
+
+{% if errores %}
+<div class="alert alert-error">
+  <ul>{% for e in errores %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div class="card form-card">
+  <form method="post">
+    <div class="field">
+      <label for="code">Código <span class="req">*</span></label>
+      <input type="text" id="code" name="code" required maxlength="30"
+             value="{{ enfermedad.code if enfermedad else '' }}"
+             placeholder="ej. DENGUE_GRAVE">
+      <p class="field-hint">Identificador único e inmutable del catálogo. Se normaliza solo:
+        acentos, espacios y signos se convierten (“Dengue grave” → <code>DENGUE_GRAVE</code>).</p>
+    </div>
+
+    <div class="field">
+      <label for="name">Nombre <span class="req">*</span></label>
+      <input type="text" id="name" name="name" required maxlength="120"
+             value="{{ enfermedad.name if enfermedad else '' }}"
+             placeholder="ej. Dengue grave">
+      <p class="field-hint">Es el nombre que se ve en el mapa, en monitoreo y en los filtros.</p>
+    </div>
+
+    <div class="field">
+      <label for="description">Descripción</label>
+      <textarea id="description" name="description" rows="4"
+                placeholder="Opcional: para qué sirve esta entrada, origen de los parámetros, notas de calibración.">{{ enfermedad.description if enfermedad else '' }}</textarea>
+    </div>
+
+    <div class="form-nota">
+      <p><strong>Se dará de alta como activa.</strong> En este catálogo «activa» significa que la
+        entrada está vigente y puede usarse, no que la enfermedad tenga casos. Si más adelante deja
+        de servir, se retira dándola de baja, no borrándola.</p>
+      <p>La columna <strong>Actividad</strong> del listado es la que responde lo otro: se calcula
+        en cada consulta a partir de los casos capturados en Nuevo León. Una enfermedad recién
+        registrada aparecerá como <em>Sin casos</em> hasta que se reporte el primero.</p>
+      <p>Los <strong>parámetros de simulación</strong> quedan vacíos. Ese JSONB es el contrato del
+        motor de simulación y no se le inventan valores a una enfermedad nueva.</p>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Registrar enfermedad</button>
+      <a href="{{ url_for('enfermedades') }}" class="btn">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
