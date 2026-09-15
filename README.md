@@ -1,9 +1,11 @@
 # EPIDEMIA — Sistema Monolítico v0.1
 
-Responsables de programacióm de este Sprint:
+Responsables de programación de este Sprint:
 
 -- Rolando Rivas Dávalos
+
 -- Jonathan Correa Ascencio
+
 
 Primera versión funcional del monolito del **Simulador de respuesta a epidemias**,
 correspondiente al Primer Avance.
@@ -338,7 +340,7 @@ Para regenerar los datos sintéticos (o ajustar tendencias por municipio):
 python scripts/gen_demo_data.py > db/datos/demo_datos_nl.sql
 ```
 
-## Decisiones que tomé y que deberías validar con tu equipo/profesor
+## Decisiones que falta validar.
 
 - **Tasa de incidencia**: la cambié de "%" (como en el mock de Figma) a *casos por
   100,000 habitantes*, que es la convención epidemiológica real. Un porcentaje
