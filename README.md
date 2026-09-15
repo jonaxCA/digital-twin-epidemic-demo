@@ -1,5 +1,10 @@
 # EPIDEMIA — Sistema Monolítico v0.1
 
+Responsables de programacióm de este Sprint:
+
+-- Rolando Rivas Dávalos
+-- Jonathan Correa Ascencio
+
 Primera versión funcional del monolito del **Simulador de respuesta a epidemias**,
 correspondiente al Primer Avance.
 
