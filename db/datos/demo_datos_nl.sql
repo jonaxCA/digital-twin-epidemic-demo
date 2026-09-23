@@ -38,19 +38,47 @@ INSERT INTO diseases (code, name, description, default_params) VALUES
 ON CONFLICT (code) DO NOTHING;
 
 -- ---------------------------------------------------------------------------
--- Usuaria de demo para el recorrido de login. Password real (bcrypt):
---   usuario:   diana.flores
---   password:  Epidemia2026!   (documentada tambien en README.md)
--- SOLO para la demo local -- no usar este patron en un ambiente real.
+-- Usuarios de demostracion para el recorrido. Passwords reales (bcrypt).
+-- Son dos personas distintas a proposito: el flujo de aprobacion exige que
+-- quien construye el escenario no sea quien lo autoriza (ver migracion 013).
+--   analista:      alex.cavazos   (rol ANALISTA)
+--   epidemiologa:  diana.flores   (rol EPIDEMIOLOGO)
+--   password de ambos:  Epidemia2026!   (documentada tambien en README.md)
+-- Mas abajo se le pone contrasena tambien a 'admin', que 010 crea con un
+-- marcador invalido a proposito.
+-- SOLO para el entorno local -- no usar este patron en un ambiente real.
 -- ---------------------------------------------------------------------------
 INSERT INTO users (username, email, password_hash, full_name, is_active)
-VALUES ('diana.flores', 'diana.flores@salud.nl.gob.mx', '$2b$12$sitPLptN.K3VoyoEYAmfE.gBVbRXgtQzNPvxpdErLzPKyoJEMJJfG',
-        'Diana Flores', TRUE)
+VALUES ('diana.flores', 'diana.flores@salud.nl.gob.mx', '$2b$12$KG2fXQLsEUcdBKZnRcyxOeZHSLcRciuzm2uW1vZCB/F7sR5PTSJZO',
+        'Diana Flores', TRUE),
+       ('alex.cavazos', 'alex.cavazos@salud.nl.gob.mx', '$2b$12$Qig7pP6lE2Qfmy7n1Bd0ruVnB2HYR.hMXOX0RUd.d51lkhfpiruum',
+        'Alex Cavazos', TRUE)
 ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 INSERT INTO user_roles (user_id, role_id)
 SELECT u.id, r.id FROM users u CROSS JOIN roles r
 WHERE u.username = 'diana.flores' AND r.code = 'EPIDEMIOLOGO'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO user_roles (user_id, role_id)
+SELECT u.id, r.id FROM users u CROSS JOIN roles r
+WHERE u.username = 'alex.cavazos' AND r.code = 'ANALISTA'
+ON CONFLICT DO NOTHING;
+
+-- Cuenta de administracion. 010_datos_iniciales.sql la crea con el marcador
+-- invalido REEMPLAZAR_ANTES_DE_DESPLEGAR justamente para que el esquema nunca
+-- viaje con una contrasena por defecto que funcione. Aqui se le pone una real
+-- porque esto son datos de demostracion: quien instale solo las migraciones,
+-- sin este archivo, sigue sin poder entrar con esa cuenta.
+--   usuario:   admin
+--   password:  Admin2026!
+UPDATE users SET password_hash = '$2b$12$f2zg5oG41Qs53eR852nVQOnMG006ePsDWuyjjQixAxbTjrOgYIs0a' WHERE username = 'admin';
+
+-- Red de seguridad: 010 ya le asigna el rol; esto solo cubre una base donde se
+-- haya perdido la asignacion.
+INSERT INTO user_roles (user_id, role_id)
+SELECT u.id, r.id FROM users u CROSS JOIN roles r
+WHERE u.username = 'admin' AND r.code = 'ADMINISTRADOR'
 ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------------------------
@@ -59,34 +87,44 @@ ON CONFLICT DO NOTHING;
 -- ---------------------------------------------------------------------------
 INSERT INTO scenarios (name, description, disease_id, region_id, owner_id, status, is_public)
 SELECT 'Ola Influenza ZMM - otono 2026',
-       'Escenario demo: proyeccion de la temporada de influenza en el area metropolitana.',
+       'Escenario de demostracion: proyeccion de la temporada de influenza en el area metropolitana.',
        d.id, r.id, u.id, 'publicado', TRUE
 FROM diseases d, regions r, users u
-WHERE d.code = 'INFLUENZA_ESTACIONAL' AND r.code = '19' AND u.username = 'diana.flores';
+WHERE d.code = 'INFLUENZA_ESTACIONAL' AND r.code = '19' AND u.username = 'alex.cavazos';
 
-INSERT INTO scenario_versions (scenario_id, version_number, is_current, population_size, horizon_days, notes, created_by)
-SELECT s.id, 1, TRUE, 500000, 180, 'Version inicial para la demo local.', u.id
-FROM scenarios s, users u
-WHERE s.name = 'Ola Influenza ZMM - otono 2026' AND u.username = 'diana.flores';
+-- La version la construye el analista y la aprueba la epidemiologa: dos
+-- personas distintas, como exige ck_scenario_versions_no_autoaprobacion (013).
+-- Tiene que quedar aprobada porque abajo cuelgan corridas de simulacion, y
+-- fn_version_aprobada (014) rechaza simular cualquier otra cosa.
+INSERT INTO scenario_versions (scenario_id, version_number, is_current, population_size,
+                               horizon_days, initial_infected, notes, created_by,
+                               status, submitted_at, reviewed_by, reviewed_at, review_comment)
+SELECT s.id, 1, TRUE, 500000, 180, 100, 'Version inicial para el entorno local.', autor.id,
+       'aprobado', now() - interval '3 days', revisor.id, now() - interval '2 days',
+       'Parametros consistentes con la temporada anterior.'
+FROM scenarios s, users autor, users revisor
+WHERE s.name = 'Ola Influenza ZMM - otono 2026'
+  AND autor.username = 'alex.cavazos'
+  AND revisor.username = 'diana.flores';
 
 INSERT INTO simulation_batches (scenario_version_id, requested_by, replicas, engine, status, summary_doc_id, created_at, finished_at)
 SELECT sv.id, u.id, 40, 'numba', 'ejecutando', NULL,
        now() - interval '35 minutes', NULL
 FROM scenario_versions sv
 JOIN scenarios s ON s.id = sv.scenario_id AND s.name = 'Ola Influenza ZMM - otono 2026'
-JOIN users u ON u.username = 'diana.flores';
+JOIN users u ON u.username = 'alex.cavazos';
 INSERT INTO simulation_batches (scenario_version_id, requested_by, replicas, engine, status, summary_doc_id, created_at, finished_at)
 SELECT sv.id, u.id, 30, 'numba', 'encolado', NULL,
        now() - interval '4 minutes', NULL
 FROM scenario_versions sv
 JOIN scenarios s ON s.id = sv.scenario_id AND s.name = 'Ola Influenza ZMM - otono 2026'
-JOIN users u ON u.username = 'diana.flores';
+JOIN users u ON u.username = 'alex.cavazos';
 INSERT INTO simulation_batches (scenario_version_id, requested_by, replicas, engine, status, summary_doc_id, created_at, finished_at)
 SELECT sv.id, u.id, 30, 'numba', 'completado', 'run_summaries:demo-001',
        now() - interval '240 minutes', now() - interval '220 minutes'
 FROM scenario_versions sv
 JOIN scenarios s ON s.id = sv.scenario_id AND s.name = 'Ola Influenza ZMM - otono 2026'
-JOIN users u ON u.username = 'diana.flores';
+JOIN users u ON u.username = 'alex.cavazos';
 
 -- Corridas individuales por lote, respetando las reglas de la 007:
 -- encolado => started_at NULL; terminal => finished_at NOT NULL; etc.
@@ -96,11 +134,14 @@ DECLARE
     v_batch_encolado   BIGINT;
     v_batch_completado BIGINT;
     v_version_id       BIGINT;
+    v_user_id          BIGINT;
     i INT;
 BEGIN
     SELECT sv.id INTO v_version_id
     FROM scenario_versions sv
     JOIN scenarios s ON s.id = sv.scenario_id AND s.name = 'Ola Influenza ZMM - otono 2026';
+
+    SELECT id INTO v_user_id FROM users WHERE username = 'alex.cavazos';
 
     SELECT id INTO v_batch_ejecutando FROM simulation_batches WHERE status = 'ejecutando' LIMIT 1;
     SELECT id INTO v_batch_encolado   FROM simulation_batches WHERE status = 'encolado'   LIMIT 1;
@@ -109,27 +150,27 @@ BEGIN
     FOR i IN 0..39 LOOP
         IF i < 25 THEN
             INSERT INTO simulation_runs
-                (batch_id, scenario_version_id, seed, replica_index, status, progress, started_at, queued_at)
-            VALUES (v_batch_ejecutando, v_version_id, 10000 + i, i, 'ejecutando',
+                (batch_id, scenario_version_id, requested_by, seed, replica_index, status, progress, started_at, queued_at)
+            VALUES (v_batch_ejecutando, v_version_id, v_user_id, 10000 + i, i, 'ejecutando',
                     (random() * 80)::smallint, now() - interval '20 minutes', now() - interval '35 minutes');
         ELSE
             INSERT INTO simulation_runs
-                (batch_id, scenario_version_id, seed, replica_index, status, progress, queued_at)
-            VALUES (v_batch_ejecutando, v_version_id, 10000 + i, i, 'encolado', 0, now() - interval '35 minutes');
+                (batch_id, scenario_version_id, requested_by, seed, replica_index, status, progress, queued_at)
+            VALUES (v_batch_ejecutando, v_version_id, v_user_id, 10000 + i, i, 'encolado', 0, now() - interval '35 minutes');
         END IF;
     END LOOP;
 
     FOR i IN 0..29 LOOP
         INSERT INTO simulation_runs
-            (batch_id, scenario_version_id, seed, replica_index, status, progress, queued_at)
-        VALUES (v_batch_encolado, v_version_id, 20000 + i, i, 'encolado', 0, now() - interval '4 minutes');
+            (batch_id, scenario_version_id, requested_by, seed, replica_index, status, progress, queued_at)
+        VALUES (v_batch_encolado, v_version_id, v_user_id, 20000 + i, i, 'encolado', 0, now() - interval '4 minutes');
     END LOOP;
 
     FOR i IN 0..29 LOOP
         INSERT INTO simulation_runs
-            (batch_id, scenario_version_id, seed, replica_index, status, progress,
+            (batch_id, scenario_version_id, requested_by, seed, replica_index, status, progress,
              queued_at, started_at, finished_at, result_doc_id)
-        VALUES (v_batch_completado, v_version_id, 30000 + i, i, 'completado', 100,
+        VALUES (v_batch_completado, v_version_id, v_user_id, 30000 + i, i, 'completado', 100,
                 now() - interval '240 minutes', now() - interval '230 minutes',
                 now() - interval '210 minutes', 'run_results:demo-' || i);
     END LOOP;

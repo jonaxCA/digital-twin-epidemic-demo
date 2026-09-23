@@ -197,20 +197,26 @@ Para detenerla: `Ctrl + C`.
 
 | Usuario | Contraseña | Rol | Qué puede hacer |
 |---|---|---|---|
-| `diana.flores` | `Epidemia2026!` | EPIDEMIOLOGO | Todo salvo gestión de usuarios |
-| `admin` | `Admin2026!` | ADMINISTRADOR | Además, el **CRUD de usuarios** |
+| `alex.cavazos` | `Epidemia2026!` | ANALISTA | Vigilancia, mapa, monitoreo y captura de casos |
+| `diana.flores` | `Epidemia2026!` | EPIDEMIOLOGO | Lo mismo por ahora |
+| `admin` | `Admin2026!` | ADMINISTRADOR | Además, **Usuarios** y **Auditoría** |
 
-> El usuario `admin` que crea `010_datos_iniciales.sql` viene con el marcador
-> `REEMPLAZAR_ANTES_DE_DESPLEGAR` como `password_hash`, inválido a propósito, así
-> que **de fábrica no puede entrar**. Para habilitarlo corre una sola vez:
+> Los dos primeros son personas distintas a propósito: la migración `013`
+> prohíbe que quien crea una versión de escenario sea quien la aprueba, y esa
+> regla ya vive en la base de datos. Las pantallas que la usan (crear escenario,
+> enviar a revisión, aprobar) son parte del siguiente avance, así que hoy ambos
+> usuarios ven lo mismo en la interfaz.
+
+> Las tres contraseñas las pone `db/datos/demo_datos_nl.sql`, así que con los
+> tres comandos del Paso 2 ya puedes entrar con cualquiera. No hay archivos
+> extra que correr.
 >
-> ```bash
-> psql -h localhost -U postgres -d simulador_epidemico -f db/datos/admin_password.sql
-> ```
->
-> Ese archivo **no modifica el esquema**: solo hace `UPDATE` del hash de esa
-> cuenta. Es seguro correrlo sobre una base que ya esté en uso — no toca casos,
-> catálogos ni las demás cuentas.
+> **Por qué importa el detalle:** `010_datos_iniciales.sql` crea al usuario
+> `admin` con el marcador `REEMPLAZAR_ANTES_DE_DESPLEGAR` como `password_hash`,
+> inválido a propósito. Quien instale **solo el esquema**, sin los datos de
+> demostración, se queda con esa cuenta inutilizable — que es justo lo que
+> quieres en un servidor real. La contraseña que funciona vive únicamente en los
+> datos de demostración.
 
 ### Gestión de usuarios (solo ADMINISTRADOR)
 
@@ -253,8 +259,8 @@ Recorre esta lista. Si algo no coincide, ve a **Problemas comunes**.
    gráfica de curva epidémica dibujada.
 4. **Mapa epidemiológico** pinta los municipios de Nuevo León en colores.
 5. **Auditoría** ya tiene al menos un renglón `LOGIN` — lo generó tu propio acceso.
-6. Si corriste `admin_password.sql`: entrando como `admin` aparece **Usuarios** en el
-   menú con los botones de Editar / Desactivar / Eliminar.
+6. Entrando como `admin` aparece **Usuarios** en el menú, con los botones de
+   Editar / Desactivar / Eliminar.
 
 Verificación rápida por consola (deberías ver `casos=3824`):
 
@@ -426,7 +432,7 @@ tests/                       pruebas del motor
 
 db/dump_completo.sql         esquema completo (migraciones 001-012 concatenadas)
 db/migraciones/              migraciones 011 y 012 como archivos individuales
-db/datos/                    cargas: municipios (generado), datos de demostracion, password de admin
+db/datos/                    cargas: municipios (generado) y datos de demostracion (incluye las 3 cuentas)
 
 scripts/build_municipios_inegi.py  capa municipal de INEGI -> geojson del mapa + centroides
 scripts/build_regiones_sql.py      centroides + catalogo -> db/datos/nl_municipios_completos.sql
