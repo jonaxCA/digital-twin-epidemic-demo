@@ -50,7 +50,8 @@ Si no lo tienes:
 Todos los comandos de base de datos de esta guía se corren con `psql`.
 
 - **Windows**: abre **SQL Shell (psql)** desde el menú inicio, o usa
-  `"C:\Program Files\PostgreSQL\15\bin\psql.exe"` desde PowerShell.
+  `"C:\Program Files\PostgreSQL\18\bin\psql.exe"` desde PowerShell (ajusta el
+  número a la versión que hayas instalado).
 - **Linux / macOS**: `psql` ya está en tu `PATH`.
 
 Conéctate siempre así (te va a pedir la contraseña del usuario `postgres`):
@@ -99,7 +100,7 @@ está en el `PATH`.
 
 | Archivo | Qué carga |
 |---|---|
-| `db/dump_completo.sql` | El esquema completo: las 12 migraciones numeradas (001–012) concatenadas |
+| `db/dump_completo.sql` | El esquema completo: las 14 migraciones numeradas (001–014) concatenadas |
 | `db/datos/nl_municipios_completos.sql` | Completa los 51 municipios de Nuevo León |
 | `db/datos/demo_datos_nl.sql` | Datos de demostración (sintéticos): 3,824 casos, escenario, simulaciones y la usuaria de login |
 
@@ -108,8 +109,7 @@ de regiones que carga `dump_completo.sql`.
 
 > **¿Ya tenías la base de una versión anterior?** Vuelve a correr
 > `db/dump_completo.sql`. Es idempotente: lo que ya existe no se duplica y se aplican
-> las migraciones nuevas (`011` y `012`). No hace falta ningún archivo de corrección
-> aparte.
+> las migraciones que falten. No hace falta ningún archivo de corrección aparte.
 
 `-v ON_ERROR_STOP=1` hace que `psql` se detenga al primer error en vez de seguir
 y dejarte la base a medias. Si un comando termina sin mensajes de `ERROR`, salió bien.
