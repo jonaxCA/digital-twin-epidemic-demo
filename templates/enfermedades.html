@@ -86,6 +86,7 @@
           <th>Enfermedad</th>
           <th title="Vigencia de la entrada en el catálogo">Estado</th>
           <th title="Situación epidemiológica, calculada a partir de los casos de Nuevo León">Actividad</th>
+          <th title="Si la enfermedad tiene los seis parámetros que el motor necesita">Parámetros</th>
           <th>Alta</th>
           <th class="col-acciones">Acciones</th>
         </tr>
@@ -103,14 +104,38 @@
           <td>
             <span class="badge actividad-pill actividad-{{ e.actividad.clave }}">{{ e.actividad.label }}</span>
           </td>
+          <td>
+            {% if e.parametros.simulable %}
+            <span class="badge param-pill param-con-fuente" title="Tiene los seis parámetros">Simulable</span>
+            {% else %}
+            <span class="badge param-pill param-falta-pill"
+                  title="Faltan: {{ e.parametros.faltan | join(', ') }}">Faltan {{ e.parametros.faltan | length }}</span>
+            {% endif %}
+            {% if e.parametros.supuestos %}
+            <span class="badge param-pill param-supuesto"
+                  title="Supuestos: {{ e.parametros.supuestos | join(', ') }}">{{ e.parametros.supuestos | length }} supuesto{{ 's' if e.parametros.supuestos | length != 1 }}</span>
+            {% endif %}
+          </td>
           <td class="celda-fecha">{{ e.alta_label }}</td>
           <td class="col-acciones">
             <button type="button" class="btn-detalle" aria-expanded="false"
                     aria-controls="detalle-{{ e.id }}" title="Ver ficha">👁</button>
+            {% if puede_editar_catalogo %}
+            <a class="btn-detalle" href="{{ url_for('enfermedad_editar', disease_id=e.id) }}"
+               title="Editar ficha y parámetros">✎</a>
+            <form method="post" action="{{ url_for('enfermedad_estado', disease_id=e.id) }}"
+                  class="form-inline">
+              <input type="hidden" name="activa" value="{{ '0' if e.activa else '1' }}">
+              <button type="submit" class="btn-detalle"
+                      title="{{ 'Dar de baja en el catálogo' if e.activa else 'Reactivar en el catálogo' }}">
+                {{ '⏸' if e.activa else '▶' }}
+              </button>
+            </form>
+            {% endif %}
           </td>
         </tr>
         <tr class="fila-detalle" id="detalle-{{ e.id }}" hidden>
-          <td colspan="6">
+          <td colspan="7">
             <div class="detalle-grid">
               <div>
                 <div class="detalle-titulo">Descripción</div>
@@ -123,15 +148,42 @@
                 </ul>
               </div>
               <div>
-                <div class="detalle-titulo">Parámetros base de simulación</div>
-                {% if e.params %}
+                <div class="detalle-titulo">Parámetros de simulación</div>
+                <ul class="detalle-lista detalle-params">
+                  {% for p in e.parametros.detalle %}
+                  <li>
+                    <span>{{ p.etiqueta }}</span>
+                    <span>
+                      {% if p.estado == 'falta' %}
+                        <em class="param-vacio">sin capturar</em>
+                      {% elif p.estado == 'por_grupo' %}
+                        por grupo de edad
+                      {% else %}
+                        {{ p.valor_label }}
+                        {% if p.estado == 'supuesto' %}
+                        <span class="badge param-pill param-supuesto">supuesto</span>
+                        {% elif p.estado == 'sin_fuente' %}
+                        <span class="badge param-pill param-sin-fuente">sin fuente</span>
+                        {% endif %}
+                      {% endif %}
+                    </span>
+                  </li>
+                  {% if p.fuente %}
+                  <li class="param-fuente-fila"><span></span><span class="param-fuente-texto">{{ p.fuente }}</span></li>
+                  {% endif %}
+                  {% endfor %}
+                </ul>
+                {% if not e.parametros.simulable %}
+                <p class="detalle-texto">Faltan parámetros: esta enfermedad todavía no se
+                  puede simular.</p>
+                {% endif %}
+                {% if e.parametros.informativos %}
+                <div class="detalle-titulo">Otros parámetros del esquema</div>
                 <ul class="detalle-lista">
-                  {% for etiqueta, valor in e.params %}
+                  {% for etiqueta, valor in e.parametros.informativos %}
                   <li><span>{{ etiqueta }}</span><span>{{ valor }}</span></li>
                   {% endfor %}
                 </ul>
-                {% else %}
-                <p class="detalle-texto">Sin parámetros cargados: se definen al crear el escenario.</p>
                 {% endif %}
               </div>
             </div>
@@ -139,7 +191,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="6" class="tabla-vacia">Ninguna enfermedad coincide con los filtros aplicados.</td>
+          <td colspan="7" class="tabla-vacia">Ninguna enfermedad coincide con los filtros aplicados.</td>
         </tr>
         {% endfor %}
       </tbody>

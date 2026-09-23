@@ -30,7 +30,7 @@ import bcrypt
 import queries
 from audit import log_audit
 from auth import (attempt_login, create_token, login_required, admin_required,
-                  tiene_rol, get_current_user, COOKIE_NAME)
+                  roles_required, tiene_rol, get_current_user, COOKIE_NAME)
 
 app = Flask(__name__)
 # flash() necesita firmar la cookie de sesion. Se reutiliza el mismo secreto
@@ -54,6 +54,10 @@ def inject_globals():
         "current_user": user,
         "now": datetime.now(timezone.utc),
         "es_admin": tiene_rol(user, "ADMINISTRADOR"),
+        # Quien puede fijar los parametros epidemiologicos del catalogo. Es
+        # solo para mostrar u ocultar botones: el control real esta en
+        # roles_required, en cada ruta.
+        "puede_editar_catalogo": tiene_rol(user, "EPIDEMIOLOGO", "ADMINISTRADOR"),
     }
 
 
@@ -277,6 +281,7 @@ def enfermedad_nueva():
     """
     if request.method == "GET":
         return render_template("enfermedad_form.html", enfermedad=None,
+                               parametros=queries.estado_parametros({}),
                                errores=[], active_nav="enfermedades")
 
     datos = {
@@ -284,22 +289,107 @@ def enfermedad_nueva():
         "name": (request.form.get("name") or "").strip(),
         "description": (request.form.get("description") or "").strip(),
     }
+    params, errores = queries.parametros_desde_form(request.form)
+    errores = queries.valida_enfermedad(datos["code"], datos["name"]) + errores
 
-    errores = queries.valida_enfermedad(datos["code"], datos["name"])
     if errores:
         return render_template("enfermedad_form.html", enfermedad=datos,
+                               parametros=queries.estado_parametros(params),
                                errores=errores, active_nav="enfermedades"), 400
 
     nuevo_id, error = queries.crear_enfermedad(
-        datos["code"], datos["name"], datos["description"])
+        datos["code"], datos["name"], datos["description"], params)
     if error:
         return render_template("enfermedad_form.html", enfermedad=datos,
+                               parametros=queries.estado_parametros(params),
                                errores=[error], active_nav="enfermedades"), 400
 
     log_audit(g.user["sub"], "CREATE", "diseases", entity_id=str(nuevo_id),
-              data_after=dict(queries.get_enfermedad(nuevo_id)))
+              data_after=_snapshot_enfermedad(queries.get_enfermedad(nuevo_id)))
     flash(f"Enfermedad «{datos['name']}» registrada con el código {datos['code']}.", "ok")
     return redirect(url_for("enfermedades"))
+
+
+def _snapshot_enfermedad(e):
+    """Lo que se guarda en audit_log. created_at no viaja: no cambia nunca y
+    json no serializa datetime sin ayuda."""
+    if not e:
+        return None
+    return {"id": e["id"], "code": e["code"], "name": e["name"],
+            "description": e["description"], "is_active": e["is_active"],
+            "default_params": e["default_params"]}
+
+
+@app.route("/enfermedades/<int:disease_id>/editar", methods=["GET", "POST"])
+@roles_required("EPIDEMIOLOGO", "ADMINISTRADOR")
+def enfermedad_editar(disease_id):
+    """Edicion del catalogo, incluidos los parametros que consume el motor.
+
+    Restringida a EPIDEMIOLOGO y ADMINISTRADOR: el alta la puede hacer
+    cualquiera (quien detecta un padecimiento nuevo es la gente de campo), pero
+    fijar R0 o la letalidad es una decision tecnica con consecuencias en cada
+    simulacion que se corra despues.
+
+    El codigo no se edita: es la llave natural con la que ya estan ligados los
+    casos y los escenarios.
+    """
+    actual = queries.get_enfermedad(disease_id)
+    if not actual:
+        flash("Esa enfermedad ya no existe en el catálogo.", "error")
+        return redirect(url_for("enfermedades"))
+
+    if request.method == "GET":
+        return render_template("enfermedad_form.html", enfermedad=actual,
+                               parametros=queries.estado_parametros(actual["default_params"]),
+                               errores=[], active_nav="enfermedades")
+
+    datos = {
+        "code": actual["code"],
+        "name": (request.form.get("name") or "").strip(),
+        "description": (request.form.get("description") or "").strip(),
+    }
+    params, errores = queries.parametros_desde_form(request.form, actual["default_params"])
+    errores = queries.valida_enfermedad(datos["code"], datos["name"]) + errores
+
+    if errores:
+        return render_template("enfermedad_form.html",
+                               enfermedad={**actual, **datos},
+                               parametros=queries.estado_parametros(params),
+                               errores=errores, active_nav="enfermedades"), 400
+
+    antes = _snapshot_enfermedad(actual)
+    ok, error = queries.actualiza_enfermedad(
+        disease_id, datos["name"], datos["description"], params)
+    if not ok:
+        return render_template("enfermedad_form.html",
+                               enfermedad={**actual, **datos},
+                               parametros=queries.estado_parametros(params),
+                               errores=[error], active_nav="enfermedades"), 400
+
+    log_audit(g.user["sub"], "UPDATE", "diseases", entity_id=str(disease_id),
+              data_before=antes,
+              data_after=_snapshot_enfermedad(queries.get_enfermedad(disease_id)))
+    flash(f"«{datos['name']}» actualizada.", "ok")
+    return redirect(url_for("enfermedades"))
+
+
+@app.route("/enfermedades/<int:disease_id>/estado", methods=["POST"])
+@roles_required("EPIDEMIOLOGO", "ADMINISTRADOR")
+def enfermedad_estado(disease_id):
+    """Baja y alta logica del catalogo. Nunca borra: los casos capturados
+    apuntan a la enfermedad con ON DELETE RESTRICT."""
+    actual = queries.get_enfermedad(disease_id)
+    if not actual:
+        flash("Esa enfermedad ya no existe en el catálogo.", "error")
+        return redirect(url_for("enfermedades"))
+
+    activa = request.form.get("activa") == "1"
+    queries.set_enfermedad_activa(disease_id, activa)
+    log_audit(g.user["sub"], "UPDATE", "diseases", entity_id=str(disease_id),
+              data_before=_snapshot_enfermedad(actual),
+              data_after=_snapshot_enfermedad(queries.get_enfermedad(disease_id)))
+    flash(f"«{actual['name']}» quedó {'activa' if activa else 'inactiva'} en el catálogo.", "ok")
+    return redirect(request.referrer or url_for("enfermedades"))
 
 
 @app.route("/export/enfermedades.csv")
@@ -310,11 +400,15 @@ def export_enfermedades_csv():
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["Código", "Enfermedad", "Estado", "Actividad", "Alta en catálogo",
-                     "Casos NL (total)", "Casos NL (30 días)"])
+                     "Casos NL (total)", "Casos NL (30 días)",
+                     "Simulable", "Parámetros faltantes", "Parámetros supuestos"])
     for e in listado["enfermedades"]:
+        p = e["parametros"]
         writer.writerow([e["code"], e["nombre"], e["estado_label"],
                          e["actividad"]["label"], e["alta_label"],
-                         e["casos_total"], e["casos_30d"]])
+                         e["casos_total"], e["casos_30d"],
+                         "Sí" if p["simulable"] else "No",
+                         len(p["faltan"]), len(p["supuestos"])])
     resp = make_response(buf.getvalue())
     resp.headers["Content-Type"] = "text/csv; charset=utf-8"
     resp.headers["Content-Disposition"] = "attachment; filename=catalogo_enfermedades.csv"

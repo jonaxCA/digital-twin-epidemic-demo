@@ -117,6 +117,33 @@ def tiene_rol(user, *codigos):
     return any(c in (user.get("roles") or []) for c in codigos)
 
 
+def roles_required(*codigos):
+    """Restringe la vista a los roles indicados.
+
+    Misma mecanica que admin_required, pero parametrizable: la usa el catalogo
+    de enfermedades, donde definir parametros epidemiologicos es trabajo del
+    EPIDEMIOLOGO (el ADMINISTRADOR entra por ser quien opera el sistema).
+
+    El intento fallido queda en la bitacora: ocultar el boton en la plantilla
+    no es control de acceso.
+    """
+    def decorador(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            user = get_current_user()
+            if not user:
+                return redirect(url_for("login", next=request.path))
+            g.user = user
+            if not tiene_rol(user, *codigos):
+                from audit import log_audit
+                log_audit(user["sub"], "PERMISSION_DENIED", "diseases",
+                          entity_id=request.path)
+                return redirect(url_for("dashboard", denegado=1))
+            return view(*args, **kwargs)
+        return wrapped
+    return decorador
+
+
 def admin_required(view):
     """Restringe la vista al rol ADMINISTRADOR.
 

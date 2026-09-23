@@ -34,10 +34,11 @@ MongoDB, Redis ni CUDA todavía.
 - [x] Quitar el `UPDATE` correctivo de `build_regiones_sql.py` / `nl_municipios_completos.sql`
 - [x] Quitar del README la explicación del error de claves (ya no existe)
 - [ ] Aplicar la misma corrección y las migraciones 011/012 en los archivos `010_*.sql`… del **repositorio del equipo**
-- [ ] Probar la instalación completa (`dump` → municipios → datos) en PostgreSQL 15+ real
-- [ ] Migración de aprobación de escenarios (ver bloque D)
-- [ ] Migración de simulación en PostgreSQL (ver bloque F)
-- [ ] Registrar cada migración nueva en `schema_migrations`
+- [x] Probar la instalación completa (`dump` → municipios → datos) en PostgreSQL real — **PostgreSQL 18.6**, 51 municipios, 3,824 casos, claves INEGI correctas sin parches
+- [x] `013_escenarios_aprobacion.sql`: flujo de aprobación por versión + infectados iniciales (bloque D)
+- [x] `014_simulacion_resultados.sql`: motor de referencia, resultados en PostgreSQL y costos de intervención (bloques F y G)
+- [x] Registrar cada migración nueva en `schema_migrations` (001–014 quedan registradas)
+- [x] **Ejecutar 013 y 014 contra PostgreSQL real**: aplicadas sin errores sobre una base existente (relleno de `requested_by` en 100 corridas incluido); 18 pruebas de las reglas nuevas pasan
 
 ### Datos oficiales
 - [ ] Sustituir `POBLACION_APROX` por la población del **Censo 2020 de INEGI** para los 51 municipios (ojo: en 010, García tiene la misma población que San Nicolás, 412,199, probablemente copiada)
@@ -46,7 +47,8 @@ MongoDB, Redis ni CUDA todavía.
 - [ ] Verificar que la suma municipal coincide con el total estatal del censo
 
 ### Instalación de principio a fin
-- [ ] Una base vacía se instala solo con migraciones + datos, **sin fixes extraordinarios**
+- [x] Sin pasos extraordinarios: la instalación son **3 comandos** (`dump` → municipios → datos). Se eliminó `admin_password.sql`; las tres cuentas quedan listas con los datos de demostración, y el esquema solo sigue creando `admin` con el marcador inválido
+- [ ] Probarlo **desde cero** sobre una base recién creada — lo verificado hasta ahora fue una *actualización* (001–012 ya existían y el dump agregó 013/014)
 - [ ] Probar la instalación completa en una máquina limpia de otro integrante
 - [x] Actualizar los pasos de instalación del README (sin fixes aparte; bases viejas se actualizan re-corriendo el dump)
 
@@ -59,17 +61,17 @@ MongoDB, Redis ni CUDA todavía.
 
 ## B. Catálogo de enfermedades (CRUD real)
 
-- [ ] Listar enfermedades (ya existe)
-- [ ] Crear enfermedad (ya existe, **ajustar** a parámetros con fuente)
-- [ ] Editar enfermedad
-- [ ] Activar / desactivar (baja lógica, no borrado)
-- [ ] Parámetros mínimos: R0 / transmisibilidad, incubación, duración infecciosa, letalidad, tasa de hospitalización
-- [ ] Estructura por parámetro en `default_params`: `{"valor": …, "fuente": "…", "supuesto": true|false}`
-- [ ] Validación: **no se guarda un parámetro sin fuente** o sin la marca explícita de supuesto
-- [ ] Mostrar en la UI qué parámetros son supuestos (etiqueta visible)
-- [ ] Cargar fuentes reales para COVID-19 e Influenza estacional
-- [ ] Solo `EPIDEMIOLOGO` y `ADMINISTRADOR` pueden editar parámetros
-- [ ] Auditoría de crear / editar / desactivar
+- [x] Listar enfermedades, ahora con columna de **Parámetros** (simulable / cuántos faltan / cuántos son supuestos)
+- [x] Crear enfermedad, con parámetros opcionales desde el alta
+- [x] Editar enfermedad (`/enfermedades/<id>/editar`); el código no se edita porque es la llave con la que ya están ligados casos y escenarios
+- [x] Activar / desactivar (baja lógica, nunca `DELETE`)
+- [x] Los **seis parámetros** que el motor exige: R0, incubación, período infeccioso, estancia hospitalaria, tasa de hospitalización y letalidad
+- [x] Estructura por parámetro en `default_params`: `{"valor": …, "fuente": "…", "supuesto": true|false}`, conservando las claves que el formulario no edita (`transmisibilidad_base`, `letalidad_por_edad`…)
+- [x] Validación: **no se guarda un parámetro sin fuente** o sin la marca explícita de supuesto
+- [x] Mostrar en la UI qué parámetros son supuestos, cuáles no tienen fuente y cuáles faltan
+- [ ] **Cargar fuentes reales para COVID-19 e Influenza** — lo tiene que hacer una persona del equipo: elegir la referencia y verificarla. El formulario ya está listo para capturarlas
+- [x] Solo `EPIDEMIOLOGO` y `ADMINISTRADOR` pueden editar (`roles_required`); el intento de un analista queda en la bitácora como `PERMISSION_DENIED`
+- [x] Auditoría de crear / editar / activar / desactivar, con estado antes y después
 
 ---
 
@@ -111,13 +113,14 @@ MongoDB, Redis ni CUDA todavía.
 - [ ] Duplicar escenario (crea uno nuevo desde una versión)
 
 ### Flujo de aprobación
-- [ ] Migración: estados de versión `borrador → en_revision → aprobado | rechazado`
-- [ ] Migración: columnas `reviewed_by`, `reviewed_at`, `review_comment`
-- [ ] `ANALISTA` crea y envía a revisión
-- [ ] `EPIDEMIOLOGO` aprueba o rechaza (motivo obligatorio al rechazar)
-- [ ] **Regla: nadie aprueba su propia versión** (validado en backend y, si es posible, en BD)
-- [ ] Una versión nueva de un escenario aprobado vuelve a `borrador`
-- [ ] Solo se puede simular una versión **aprobada**
+- [x] Migración `013`: estados de versión `borrador → en_revision → aprobado | rechazado`
+- [x] Migración `013`: columnas `submitted_at`, `reviewed_by`, `reviewed_at`, `review_comment`, con CHECK de coherencia (rechazar exige motivo)
+- [ ] `ANALISTA` crea y envía a revisión (pantallas)
+- [ ] `EPIDEMIOLOGO` aprueba o rechaza (pantallas)
+- [x] **Nadie aprueba su propia versión**: `ck_scenario_versions_no_autoaprobacion` lo impide en la base
+- [ ] En el backend, exigir además el rol `EPIDEMIOLOGO` al aprobar
+- [x] Una versión nueva de un escenario aprobado vuelve a `borrador` (es el default de la columna)
+- [x] **Solo se simula una versión aprobada**: el trigger `fn_version_aprobada` (014) rechaza corridas sobre cualquier otro estado
 - [ ] Bandeja "Pendientes de revisión" para el epidemiólogo
 - [ ] Auditoría de envío, aprobación y rechazo
 
@@ -135,15 +138,15 @@ MongoDB, Redis ni CUDA todavía.
 - [x] Pruebas unitarias: reproducibilidad, conservación de población, validación, sin intervención vs con intervención (`python -m unittest discover -s tests -t .`)
 - [x] Indicadores resumen (adelanto de F): acumulados, activos, pico, día del pico, hospitalizaciones, fallecimientos, tasa de ataque
 - [ ] Sustituir la población por grupo de edad del ejemplo por datos del Censo 2020 (depende de A)
-- [ ] Capturar R0, tasa de hospitalización y días de hospitalización **con fuente** en las enfermedades (depende de B)
+- [ ] Capturar R0, tasa de hospitalización y días de hospitalización **con fuente** en las enfermedades — la pantalla ya existe (bloque B); hoy a las 6 enfermedades del catálogo les faltan entre 3 y 6 parámetros, así que **ninguna se puede simular todavía**
 
 ---
 
 ## F. Ejecución, estados y resultados
 
 ### Corridas
-- [ ] Migración: permitir el motor `python-ref-0.1` (hoy el CHECK solo acepta `numba`/`cuda`)
-- [ ] Migración: agregar `requested_by` a `simulation_runs`
+- [x] Migración `014`: motor `python-ref` admitido y lotes desde 1 réplica (antes el mínimo eran 30)
+- [x] Migración `014`: `requested_by` en `simulation_runs`, con relleno desde el lote para bases existentes
 - [ ] Cada corrida guarda: run_id, scenario_id, versión, engine_version, seed, inicio, fin, usuario, parámetros, estado
 - [ ] Identificador visible tipo `SIM-00042` / `ESC-003`
 - [ ] Botón "Ejecutar simulación" solo en versiones aprobadas
@@ -156,7 +159,7 @@ MongoDB, Redis ni CUDA todavía.
 - [ ] Probar a propósito el camino de ERROR
 
 ### Resultados (en PostgreSQL)
-- [ ] Migración: tabla de resultados (resumen + serie diaria en JSONB)
+- [x] Migración `014`: tabla `simulation_results` (resumen + serie diaria en JSONB, con columnas generadas para los indicadores y la huella del escenario)
 - [ ] Indicadores: casos acumulados, casos activos, pico de casos, día del pico, hospitalizaciones, fallecimientos, tasa de ataque
 - [ ] Curvas temporales S, E, I, R, H, D con Highcharts
 - [ ] Re-ejecutar con la misma semilla reproduce el mismo resultado (demostrable)
@@ -175,7 +178,8 @@ MongoDB, Redis ni CUDA todavía.
 ### Trade-off
 - [x] Costo unitario por tipo de intervención, con fuente o **marcado como supuesto** (sin valores por defecto)
 - [x] Costo del escenario: unitario × población × intensidad × días activos; vacunación por dosis aplicadas (`motor/pareto.py`)
-- [ ] Capturar y guardar los costos unitarios (hoy solo existen en el ejemplo de `python -m motor`)
+- [x] Columnas para el costo en `intervention_types` (`014`), con la regla de que un costo sin fuente debe marcarse como supuesto
+- [ ] Capturar los importes (la migración deja la unidad de cada tipo, pero el costo en NULL a propósito) y una pantalla para editarlos
 - [ ] Gráfico impacto sanitario vs costo de intervención
 - [x] Calcular y marcar escenarios **no dominados** (frontera de Pareto), con impacto evitado y costo por unidad evitada contra el escenario base
 - [ ] La decisión final queda explícitamente en manos del usuario
@@ -189,7 +193,7 @@ MongoDB, Redis ni CUDA todavía.
 - [ ] **Aviso permanente** en pantallas de simulación, resultados y comparación: *"Los resultados representan escenarios simulados basados en parámetros y supuestos. No constituyen una predicción epidemiológica ni una recomendación sanitaria."*
 - [ ] Permisos por rol revisados en cada ruta nueva (no solo ocultar el menú)
 - [ ] Auditoría consultable de todo el flujo: escenario, versiones, aprobación, corridas
-- [ ] Datos de demostración: usuarios `ANALISTA` y `EPIDEMIOLOGO` distintos para probar la regla de no autoaprobación
+- [x] Datos de demostración: `alex.cavazos` (ANALISTA) y `diana.flores` (EPIDEMIOLOGO); el escenario de la demo ya viene creado por uno y aprobado por la otra
 - [ ] Mensajes de éxito / error consistentes en todos los formularios
 
 ---

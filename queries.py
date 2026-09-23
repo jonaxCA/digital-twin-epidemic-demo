@@ -15,6 +15,8 @@ del documento del proyecto
     >= 15%  de aumento  -> "Alerta"
     resto (estable o a la baja) -> "Estable"
 """
+import json
+import math
 import re
 import unicodedata
 from datetime import date, timedelta
@@ -186,30 +188,6 @@ def _fecha_corta(valor):
     return f"{valor.day:02d} {_MESES[valor.month - 1]} {valor.year}"
 
 
-def _resumen_params(params):
-    """Aplana default_params a pares (etiqueta, valor) para la ficha del
-    detalle. Omite lo que no venga: PATOGENO_X trae '{}' y no debe inventarse
-    nada por el."""
-    if not params:
-        return []
-    out = []
-    incubacion = params.get("incubacion_dias") or {}
-    if incubacion.get("media") is not None:
-        out.append(("Incubación", f"{incubacion['media']} días (media)"))
-    infeccioso = params.get("infeccioso_dias") or {}
-    if infeccioso.get("media") is not None:
-        out.append(("Período infeccioso", f"{infeccioso['media']} días (media)"))
-    if params.get("prob_asintomatico") is not None:
-        out.append(("Asintomáticos", f"{round(params['prob_asintomatico'] * 100)}%"))
-    if params.get("transmisibilidad_base") is not None:
-        out.append(("Transmisibilidad base", str(params["transmisibilidad_base"])))
-    letalidad = params.get("letalidad_por_edad") or {}
-    if letalidad:
-        grupo, tasa = max(letalidad.items(), key=lambda kv: kv[1])
-        out.append(("Letalidad máx.", f"{round(tasa * 100, 2)}% (grupo {grupo})"))
-    return out
-
-
 def get_enfermedades_stats():
     """Las 4 tarjetas del encabezado. 'Detectadas recientemente' cuenta
     enfermedades con al menos un caso en Nuevo Leon en los ultimos 30 dias --
@@ -310,7 +288,7 @@ def get_enfermedades(busqueda=None, estado=None, pagina=1, por_pagina=10):
         "casos_total": r["casos_total"],
         "casos_30d": r["casos_30d"],
         "ultimo_caso_label": _fecha_corta(r["ultimo_caso"]) or "Sin casos registrados",
-        "params": _resumen_params(r["default_params"]),
+        "parametros": estado_parametros(r["default_params"]),
     } for r in rows]
 
     return {
@@ -381,15 +359,15 @@ def valida_enfermedad(code, name):
     return errores
 
 
-def crear_enfermedad(code, name, description=None):
+def crear_enfermedad(code, name, description=None, params=None):
     """Alta en el catalogo. Devuelve (disease_id, error).
 
-    default_params se queda en '{}': ese JSONB es el contrato del motor de
-    simulacion y no hay forma honesta de inventarle parametros a una
-    enfermedad recien registrada. PATOGENO_X, que viene en el esquema
-    entregado, esta exactamente asi.
+    Los parametros son opcionales: se puede registrar el padecimiento y
+    capturarlos despues, cuando alguien tenga la fuente a la mano. Lo que no se
+    permite en ningun momento es un valor sin fuente ni marca de supuesto; de
+    eso se encarga parametros_desde_form().
 
-    is_active tampoco se manda: se deja el DEFAULT TRUE de la columna.
+    is_active no se manda: se deja el DEFAULT TRUE de la columna.
 
     El codigo duplicado se detecta por el 23505 de Postgres y no con un SELECT
     previo, que tendria carrera -- mismo criterio que crear_usuario.
@@ -399,11 +377,12 @@ def crear_enfermedad(code, name, description=None):
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO diseases (code, name, description)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO diseases (code, name, description, default_params)
+                    VALUES (%s, %s, %s, %s::jsonb)
                     RETURNING id
                     """,
-                    (code, name.strip(), (description or "").strip() or None),
+                    (code, name.strip(), (description or "").strip() or None,
+                     json.dumps(params or {}, ensure_ascii=False)),
                 )
                 nuevo_id = cur.fetchone()[0]
             conn.commit()
@@ -415,16 +394,214 @@ def crear_enfermedad(code, name, description=None):
 
 
 def get_enfermedad(disease_id):
-    """Una sola enfermedad del catalogo. Se usa para el snapshot que va a
-    audit_log despues del alta."""
+    """Una sola enfermedad del catalogo. Se usa para la edicion y para el
+    snapshot que va a audit_log."""
     return query(
         """
-        SELECT id, code, name, description, is_active, created_at
+        SELECT id, code, name, description, is_active, created_at, default_params
         FROM diseases WHERE id = %s
         """,
         (disease_id,),
         one=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Parametros de simulacion de una enfermedad
+# ---------------------------------------------------------------------------
+# Regla del proyecto: no se inventan parametros desde la interfaz. Cada valor
+# se guarda con su fuente o marcado explicitamente como supuesto del equipo.
+# El formato es el que consume el motor (ver motor/parametros.py):
+#
+#     "r0": {"valor": 1.3, "fuente": "Biggerstaff et al. 2014", "supuesto": false}
+#
+# El motor tambien acepta el numero pelon y el formato de distribucion que trae
+# 010_datos_iniciales.sql ({"dist": "lognormal", "media": 5.1, ...}). Aqui se
+# leen los tres para no romper lo ya cargado, pero lo que se ESCRIBE siempre
+# lleva fuente o marca de supuesto.
+#
+# Son los seis que el motor exige para poder correr. Si falta uno, la
+# enfermedad no se puede simular y la pantalla lo dice.
+
+PARAMETROS_SIMULACION = [
+    {"clave": "r0", "etiqueta": "R₀ — número reproductivo básico",
+     "unidad": "contagios por caso", "min": 0.01, "max": 20.0, "paso": "0.01",
+     "ayuda": "Contagios que genera un caso en una población sin inmunidad."},
+    {"clave": "incubacion_dias", "etiqueta": "Período de incubación",
+     "unidad": "días", "min": 0.1, "max": 60.0, "paso": "0.1",
+     "ayuda": "Del contagio al inicio de síntomas. El motor usa la media."},
+    {"clave": "infeccioso_dias", "etiqueta": "Período infeccioso",
+     "unidad": "días", "min": 0.1, "max": 60.0, "paso": "0.1",
+     "ayuda": "Cuánto tiempo puede contagiar una persona."},
+    {"clave": "dias_hospitalizacion", "etiqueta": "Estancia hospitalaria",
+     "unidad": "días", "min": 0.1, "max": 120.0, "paso": "0.1",
+     "ayuda": "Duración promedio de la hospitalización."},
+    {"clave": "tasa_hospitalizacion", "etiqueta": "Tasa de hospitalización",
+     "unidad": "%", "porcentaje": True, "min": 0.0, "max": 100.0, "paso": "0.001",
+     "ayuda": "De cada 100 infectados, cuántos terminan hospitalizados."},
+    {"clave": "letalidad", "etiqueta": "Letalidad (IFR)",
+     "unidad": "%", "porcentaje": True, "min": 0.0, "max": 100.0, "paso": "0.0001",
+     "ayuda": "De cada 100 infectados, cuántos fallecen."},
+]
+
+# Claves que el esquema ya trae y que este formulario no edita. Se muestran
+# como informativas y se conservan intactas al guardar: son del contrato con el
+# motor de agentes que viene despues, no de este formulario.
+PARAMETROS_INFORMATIVOS = {
+    "prob_asintomatico": "Proporción de asintomáticos",
+    "transmisibilidad_base": "Transmisibilidad base (modelo de agentes)",
+    "letalidad_por_edad": "Letalidad por grupo de edad",
+}
+
+
+def _desarma_param(bruto):
+    """(valor, fuente, supuesto) a partir de cualquiera de los tres formatos."""
+    if isinstance(bruto, dict):
+        if "valor" in bruto:
+            return bruto.get("valor"), bruto.get("fuente"), bool(bruto.get("supuesto", False))
+        if "media" in bruto:                      # formato de 010_datos_iniciales
+            return bruto.get("media"), None, False
+        return None, None, False
+    if isinstance(bruto, (int, float)) and not isinstance(bruto, bool):
+        return bruto, None, False
+    return None, None, False
+
+
+def _formatea_valor(spec, valor):
+    if valor is None:
+        return None
+    mostrado = valor * 100 if spec.get("porcentaje") else valor
+    return f"{mostrado:g} {spec['unidad']}".strip()
+
+
+def estado_parametros(default_params):
+    """Todo lo que la pantalla necesita saber de los parametros de una
+    enfermedad: valor, procedencia y si alcanza para simular."""
+    params = default_params or {}
+    por_edad = params.get("letalidad_por_edad")
+    tiene_por_edad = isinstance(por_edad, dict) and bool(por_edad)
+
+    detalle, faltan, supuestos, sin_fuente = [], [], [], []
+    for spec in PARAMETROS_SIMULACION:
+        valor, fuente, supuesto = _desarma_param(params.get(spec["clave"]))
+        # El motor acepta letalidad_por_edad como alias de letalidad, asi que
+        # una enfermedad con la tabla por edad ya cumple ese requisito.
+        heredado = valor is None and spec["clave"] == "letalidad" and tiene_por_edad
+
+        if valor is None and not heredado:
+            estado = "falta"
+            faltan.append(spec["clave"])
+        elif heredado:
+            estado = "por_grupo"
+        elif supuesto:
+            estado = "supuesto"
+            supuestos.append(spec["clave"])
+        elif fuente:
+            estado = "con_fuente"
+        else:
+            estado = "sin_fuente"
+            sin_fuente.append(spec["clave"])
+
+        detalle.append({
+            **spec,
+            "valor": valor,
+            # El formulario trabaja en % para las tasas; la base guarda 0–1.
+            "valor_form": ("" if valor is None
+                           else f"{valor * 100:g}" if spec.get("porcentaje") else f"{valor:g}"),
+            "valor_label": _formatea_valor(spec, valor),
+            "fuente": fuente or "",
+            "supuesto": supuesto,
+            "estado": estado,
+        })
+
+    informativos = []
+    for clave, etiqueta in PARAMETROS_INFORMATIVOS.items():
+        bruto = params.get(clave)
+        if bruto in (None, {}, ""):
+            continue
+        if isinstance(bruto, dict):
+            texto = ", ".join(f"{k}: {v}" for k, v in bruto.items())
+        else:
+            texto = str(bruto)
+        informativos.append((etiqueta, texto))
+
+    return {
+        "detalle": detalle,
+        "informativos": informativos,
+        "faltan": faltan,
+        "supuestos": supuestos,
+        "sin_fuente": sin_fuente,
+        "simulable": not faltan,
+    }
+
+
+def parametros_desde_form(form, actuales=None):
+    """Arma el JSONB de parametros con lo que venga del formulario.
+
+    Devuelve (params, errores). Conserva las claves que este formulario no
+    edita (las informativas): guardar R0 no debe borrar la tabla de letalidad
+    por edad que ya traia la enfermedad.
+
+    La regla dura: un valor sin fuente y sin marca de supuesto NO se guarda.
+    """
+    params = dict(actuales or {})
+    errores = []
+
+    for spec in PARAMETROS_SIMULACION:
+        clave = spec["clave"]
+        crudo = (form.get(f"p_{clave}_valor") or "").strip()
+        fuente = (form.get(f"p_{clave}_fuente") or "").strip()
+        supuesto = form.get(f"p_{clave}_supuesto") == "on"
+
+        if not crudo:
+            params.pop(clave, None)      # vaciar el campo retira el parametro
+            continue
+
+        try:
+            valor = float(crudo.replace(",", "."))
+        except ValueError:
+            errores.append(f"{spec['etiqueta']}: «{crudo}» no es un número.")
+            continue
+        if not math.isfinite(valor) or not (spec["min"] <= valor <= spec["max"]):
+            errores.append(f"{spec['etiqueta']}: debe estar entre {spec['min']:g} "
+                           f"y {spec['max']:g} {spec['unidad']}.")
+            continue
+        if not fuente and not supuesto:
+            errores.append(f"{spec['etiqueta']}: falta la fuente. Escríbela o marca "
+                           "la casilla de supuesto.")
+            continue
+
+        params[clave] = {
+            "valor": round(valor / 100, 10) if spec.get("porcentaje") else valor,
+            "fuente": fuente or None,
+            "supuesto": supuesto,
+        }
+
+    return params, errores
+
+
+def actualiza_enfermedad(disease_id, name, description, params):
+    """Edicion del catalogo. El codigo NO se toca: es la llave natural con la
+    que ya estan ligados los casos, los escenarios y los CSV exportados."""
+    try:
+        execute(
+            """
+            UPDATE diseases
+            SET name = %s, description = %s, default_params = %s::jsonb
+            WHERE id = %s
+            """,
+            (name.strip(), (description or "").strip() or None,
+             json.dumps(params, ensure_ascii=False), disease_id),
+        )
+        return True, None
+    except psycopg2.errors.CheckViolation:
+        return False, "Los datos no cumplen las restricciones de la base."
+
+
+def set_enfermedad_activa(disease_id, activa):
+    """Baja y alta logica. Nunca DELETE: los casos capturados apuntan aqui con
+    ON DELETE RESTRICT, y el historico no se tira."""
+    execute("UPDATE diseases SET is_active = %s WHERE id = %s", (bool(activa), disease_id))
 
 
 BUCKETS = [
