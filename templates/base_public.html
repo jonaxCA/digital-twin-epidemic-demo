@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}EPIDEMIA{% endblock %} · Simulador de respuesta a epidemias</title>
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet" />
+  <link href="{{ url_for('static', filename='css/styles.css') }}" rel="stylesheet" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar sidebar-public">
+      <div class="sidebar-brand">
+        <div class="logo-badge">⚕</div>
+        <div class="brand-text">
+          <span class="title">EPIDEMIA</span>
+          <span class="subtitle">Sistema Monolítico v0.1</span>
+        </div>
+      </div>
+      <a class="login-link" href="{{ url_for('login') }}"><span class="nav-icon">👤</span> Log in</a>
+    </aside>
+    <div class="main">
+      <div class="content">
+        {% block content %}{% endblock %}
+      </div>
+    </div>
+  </div>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

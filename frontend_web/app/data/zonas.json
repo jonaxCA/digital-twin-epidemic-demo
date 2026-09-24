@@ -1,8 +1,0 @@
-[
-  {"clave": "NL-039", "nombre": "Monterrey", "zona": "Zona Norte", "casos": 1245, "incidencia": 45.2, "variacion": 12.4, "hospitalizados": 84, "estado": "Critico", "poblacion": 1142194, "camas": 620, "uci": 78},
-  {"clave": "NL-019", "nombre": "San Nicolas de los Garza", "zona": "Zona Centro", "casos": 892, "incidencia": 32.8, "variacion": 4.1, "hospitalizados": 42, "estado": "Alerta", "poblacion": 412199, "camas": 310, "uci": 40},
-  {"clave": "NL-026", "nombre": "Guadalupe", "zona": "Zona Sur", "casos": 430, "incidencia": 18.5, "variacion": -2.3, "hospitalizados": 15, "estado": "Estable", "poblacion": 643143, "camas": 280, "uci": 32},
-  {"clave": "NL-006", "nombre": "Apodaca", "zona": "Zona Este", "casos": 215, "incidencia": 12.1, "variacion": -5.8, "hospitalizados": 6, "estado": "Estable", "poblacion": 656464, "camas": 190, "uci": 22},
-  {"clave": "NL-018", "nombre": "Santa Catarina", "zona": "Zona Oeste", "casos": 312, "incidencia": 15.4, "variacion": 1.2, "hospitalizados": 11, "estado": "Estable", "poblacion": 306322, "camas": 150, "uci": 18},
-  {"clave": "NL-031", "nombre": "General Escobedo", "zona": "Zona Norte", "casos": 388, "incidencia": 21.7, "variacion": 6.9, "hospitalizados": 19, "estado": "Alerta", "poblacion": 481048, "camas": 175, "uci": 20}
-]

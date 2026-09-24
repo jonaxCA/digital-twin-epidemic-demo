@@ -1,0 +1,239 @@
+{% extends "base_app.html" %}
+{% block title %}Enfermedades{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Catálogo de enfermedades</h1>
+    <p class="subtitle">Administra las enfermedades disponibles para el monitoreo epidemiológico y las simulaciones.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{{ url_for('export_enfermedades_csv', **filtros_url) }}">⬇ Exportar</a>
+    <a class="btn btn-primary" href="{{ url_for('enfermedad_nueva') }}">+ Nueva enfermedad</a>
+  </div>
+</div>
+
+{% with mensajes = get_flashed_messages(with_categories=true) %}
+  {% for categoria, mensaje in mensajes %}
+  <div class="alert alert-{{ 'error' if categoria == 'error' else 'ok' }}">{{ mensaje }}</div>
+  {% endfor %}
+{% endwith %}
+
+<div class="stat-grid">
+  <div class="card stat-card">
+    <div class="stat-label"><span>REGISTRADAS</span> <span>☉</span></div>
+    <div class="stat-value">{{ stats.registradas }}</div>
+    <div class="stat-trend">
+      <span class="sim-badge">+{{ stats.altas_30d }}</span>
+      <span>altas en 30 días</span>
+    </div>
+  </div>
+
+  <div class="card stat-card">
+    <div class="stat-label"><span>ACTIVAS</span> <span>🟢</span></div>
+    <div class="stat-value">{{ stats.activas }}</div>
+    <div class="stat-trend">
+      <span class="badge badge-estable">{{ stats.activas_pct }}%</span>
+      <span>del catálogo</span>
+    </div>
+  </div>
+
+  <div class="card stat-card">
+    <div class="stat-label"><span>INACTIVAS</span> <span>⚪</span></div>
+    <div class="stat-value">{{ stats.inactivas }}</div>
+    <div class="stat-trend"><span>dadas de baja lógica</span></div>
+  </div>
+
+  <div class="card stat-card">
+    <div class="stat-label"><span>DETECTADAS RECIENTEMENTE</span> <span>⚠️</span></div>
+    <div class="stat-value">{{ stats.detectadas_30d }}</div>
+    <div class="stat-trend"><span>con casos en NL · últimos 30 días</span></div>
+  </div>
+</div>
+
+<form class="card filtros-card" method="get" action="{{ url_for('enfermedades') }}">
+  <div class="field">
+    <label for="q">Búsqueda</label>
+    <input type="search" name="q" id="q" value="{{ filtros.busqueda }}"
+           placeholder="Buscar por nombre o código..." />
+  </div>
+  <div class="field">
+    <label for="estado">Estado</label>
+    <select name="estado" id="estado">
+      <option value="">Todos</option>
+      <option value="activa" {{ 'selected' if filtros.estado == 'activa' else '' }}>Activa</option>
+      <option value="inactiva" {{ 'selected' if filtros.estado == 'inactiva' else '' }}>Inactiva</option>
+    </select>
+  </div>
+  <div class="filtro-acciones">
+    <a class="btn" href="{{ url_for('enfermedades') }}">Limpiar</a>
+    <button type="submit" class="btn btn-primary">Aplicar</button>
+  </div>
+</form>
+
+<div class="card">
+  <div class="card-header">
+    <div>
+      <h3>Enfermedades registradas</h3>
+      <p class="subtitle">Los conteos de casos están acotados a Nuevo León, igual que el resto de la app.</p>
+    </div>
+  </div>
+
+  <div class="tabla-scroll">
+    <table class="situacion-table catalogo-table">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Enfermedad</th>
+          <th title="Vigencia de la entrada en el catálogo">Estado</th>
+          <th title="Situación epidemiológica, calculada a partir de los casos de Nuevo León">Actividad</th>
+          <th title="Si la enfermedad tiene los seis parámetros que el motor necesita">Parámetros</th>
+          <th>Alta</th>
+          <th class="col-acciones">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in listado.enfermedades %}
+        <tr>
+          <td><code class="codigo-chip">{{ e.code }}</code></td>
+          <td class="celda-nombre">{{ e.nombre }}</td>
+          <td>
+            <span class="badge estado-pill {{ 'estado-activa' if e.activa else 'estado-inactiva' }}">
+              <span class="estado-dot"></span>{{ e.estado_label }}
+            </span>
+          </td>
+          <td>
+            <span class="badge actividad-pill actividad-{{ e.actividad.clave }}">{{ e.actividad.label }}</span>
+          </td>
+          <td>
+            {% if e.parametros.simulable %}
+            <span class="badge param-pill param-con-fuente" title="Tiene los seis parámetros">Simulable</span>
+            {% else %}
+            <span class="badge param-pill param-falta-pill"
+                  title="Faltan: {{ e.parametros.faltan | join(', ') }}">Faltan {{ e.parametros.faltan | length }}</span>
+            {% endif %}
+            {% if e.parametros.supuestos %}
+            <span class="badge param-pill param-supuesto"
+                  title="Supuestos: {{ e.parametros.supuestos | join(', ') }}">{{ e.parametros.supuestos | length }} supuesto{{ 's' if e.parametros.supuestos | length != 1 }}</span>
+            {% endif %}
+          </td>
+          <td class="celda-fecha">{{ e.alta_label }}</td>
+          <td class="col-acciones">
+            <button type="button" class="btn-detalle" aria-expanded="false"
+                    aria-controls="detalle-{{ e.id }}" title="Ver ficha">👁</button>
+            {% if puede_editar_catalogo %}
+            <a class="btn-detalle" href="{{ url_for('enfermedad_editar', disease_id=e.id) }}"
+               title="Editar ficha y parámetros">✎</a>
+            <form method="post" action="{{ url_for('enfermedad_estado', disease_id=e.id) }}"
+                  class="form-inline">
+              <input type="hidden" name="activa" value="{{ '0' if e.activa else '1' }}">
+              <button type="submit" class="btn-detalle"
+                      title="{{ 'Dar de baja en el catálogo' if e.activa else 'Reactivar en el catálogo' }}">
+                {{ '⏸' if e.activa else '▶' }}
+              </button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        <tr class="fila-detalle" id="detalle-{{ e.id }}" hidden>
+          <td colspan="7">
+            <div class="detalle-grid">
+              <div>
+                <div class="detalle-titulo">Descripción</div>
+                <p class="detalle-texto">{{ e.descripcion or 'Sin descripción en el catálogo.' }}</p>
+                <div class="detalle-titulo">Casos en Nuevo León</div>
+                <ul class="detalle-lista">
+                  <li><span>Total histórico</span><span>{{ "{:,}".format(e.casos_total) }}</span></li>
+                  <li><span>Últimos 30 días</span><span>{{ "{:,}".format(e.casos_30d) }}</span></li>
+                  <li><span>Último reporte</span><span>{{ e.ultimo_caso_label }}</span></li>
+                </ul>
+              </div>
+              <div>
+                <div class="detalle-titulo">Parámetros de simulación</div>
+                <ul class="detalle-lista detalle-params">
+                  {% for p in e.parametros.detalle %}
+                  <li>
+                    <span>{{ p.etiqueta }}</span>
+                    <span>
+                      {% if p.estado == 'falta' %}
+                        <em class="param-vacio">sin capturar</em>
+                      {% elif p.estado == 'por_grupo' %}
+                        por grupo de edad
+                      {% else %}
+                        {{ p.valor_label }}
+                        {% if p.estado == 'supuesto' %}
+                        <span class="badge param-pill param-supuesto">supuesto</span>
+                        {% elif p.estado == 'sin_fuente' %}
+                        <span class="badge param-pill param-sin-fuente">sin fuente</span>
+                        {% endif %}
+                      {% endif %}
+                    </span>
+                  </li>
+                  {% if p.fuente %}
+                  <li class="param-fuente-fila"><span></span><span class="param-fuente-texto">{{ p.fuente }}</span></li>
+                  {% endif %}
+                  {% endfor %}
+                </ul>
+                {% if not e.parametros.simulable %}
+                <p class="detalle-texto">Faltan parámetros: esta enfermedad todavía no se
+                  puede simular.</p>
+                {% endif %}
+                {% if e.parametros.informativos %}
+                <div class="detalle-titulo">Otros parámetros del esquema</div>
+                <ul class="detalle-lista">
+                  {% for etiqueta, valor in e.parametros.informativos %}
+                  <li><span>{{ etiqueta }}</span><span>{{ valor }}</span></li>
+                  {% endfor %}
+                </ul>
+                {% endif %}
+              </div>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="tabla-vacia">Ninguna enfermedad coincide con los filtros aplicados.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tabla-footer">
+    <span class="tabla-conteo">
+      {% if listado.total %}
+      Mostrando {{ listado.desde }}–{{ listado.hasta }} de {{ listado.total }} enfermedades
+      {% else %}
+      Sin resultados
+      {% endif %}
+    </span>
+    {% if listado.paginas > 1 %}
+    <div class="paginador">
+      {% if listado.pagina > 1 %}
+      <a class="pag-btn" href="{{ url_for('enfermedades', pagina=listado.pagina - 1, **filtros_url) }}">‹</a>
+      {% endif %}
+      {% for p in range(1, listado.paginas + 1) %}
+      <a class="pag-btn {{ 'activa' if p == listado.pagina else '' }}"
+         href="{{ url_for('enfermedades', pagina=p, **filtros_url) }}">{{ p }}</a>
+      {% endfor %}
+      {% if listado.pagina < listado.paginas %}
+      <a class="pag-btn" href="{{ url_for('enfermedades', pagina=listado.pagina + 1, **filtros_url) }}">›</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  document.querySelectorAll('.btn-detalle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const fila = document.getElementById(btn.getAttribute('aria-controls'));
+      const abierta = !fila.hidden;
+      fila.hidden = abierta;
+      btn.setAttribute('aria-expanded', String(!abierta));
+      btn.classList.toggle('abierto', !abierta);
+    });
+  });
+</script>
+{% endblock %}

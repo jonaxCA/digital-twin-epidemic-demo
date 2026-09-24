@@ -1,0 +1,91 @@
+{% extends "base_app.html" %}
+{% block title %}{{ "Editar usuario" if usuario and usuario.id else "Nuevo usuario" }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ "Editar usuario" if usuario and usuario.id else "Nuevo usuario" }}</h1>
+    <p class="subtitle">
+      {% if usuario and usuario.id %}
+        Modifica los datos de acceso y el rol de <strong>{{ usuario.username }}</strong>.
+      {% else %}
+        Da de alta una cuenta y asígnale un rol del catálogo.
+      {% endif %}
+    </p>
+  </div>
+</div>
+
+{% if errores %}
+<div class="alert alert-error">
+  <ul>{% for e in errores %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div class="card form-card">
+  <form method="post">
+    {% if usuario and usuario.id %}
+      <div class="field">
+        <label>Usuario</label>
+        <input type="text" value="{{ usuario.username }}" disabled>
+        <p class="field-hint">El nombre de usuario no se puede cambiar: es la llave con la que
+          inicia sesión y con la que quedaron firmados sus registros anteriores.</p>
+      </div>
+    {% else %}
+      <div class="field">
+        <label for="username">Usuario <span class="req">*</span></label>
+        <input type="text" id="username" name="username" required minlength="3" maxlength="60"
+               value="{{ usuario.username if usuario else '' }}" placeholder="ej. j.perez">
+        <p class="field-hint">Se guarda en minúsculas. Mínimo 3 caracteres.</p>
+      </div>
+    {% endif %}
+
+    <div class="field">
+      <label for="full_name">Nombre completo <span class="req">*</span></label>
+      <input type="text" id="full_name" name="full_name" required maxlength="160"
+             value="{{ usuario.full_name if usuario else '' }}">
+    </div>
+
+    <div class="field">
+      <label for="email">Correo electrónico <span class="req">*</span></label>
+      <input type="email" id="email" name="email" required maxlength="160"
+             value="{{ usuario.email if usuario else '' }}">
+    </div>
+
+    <div class="field">
+      <label for="role_id">Rol <span class="req">*</span></label>
+      <select id="role_id" name="role_id" required>
+        <option value="">Selecciona...</option>
+        {% for r in roles %}
+        <option value="{{ r.id }}" {{ 'selected' if usuario and usuario.role_id == r.id else '' }}>{{ r.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="password">
+        Contraseña {% if not (usuario and usuario.id) %}<span class="req">*</span>{% endif %}
+      </label>
+      <input type="password" id="password" name="password" minlength="8"
+             {{ 'required' if not (usuario and usuario.id) else '' }}
+             placeholder="{{ 'Dejar en blanco para conservar la actual' if usuario and usuario.id else 'Mínimo 8 caracteres' }}">
+      {% if usuario and usuario.id %}
+      <p class="field-hint">Solo se cambia si escribes algo aquí.</p>
+      {% endif %}
+    </div>
+
+    <div class="field-check">
+      <label>
+        <input type="checkbox" name="is_active"
+               {{ 'checked' if (usuario is none) or usuario.is_active else '' }}>
+        Cuenta activa
+      </label>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">
+        {{ "Guardar cambios" if usuario and usuario.id else "Crear usuario" }}
+      </button>
+      <a href="{{ url_for('usuarios') }}" class="btn">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

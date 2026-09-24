@@ -1,0 +1,457 @@
+{% extends "base_app.html" %}
+{% block title %}Mapa epidemiológico{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Mapa epidemiológico</h1>
+    <p class="subtitle">Distribución geográfica de la incidencia epidemiológica · Nuevo León (51 municipios, 10 con datos capturados)</p>
+  </div>
+</div>
+
+<form class="mapa-filtros" id="filtros-form">
+  <div class="field">
+    <label for="dias">Período</label>
+    <select name="dias" id="dias">
+      <option value="7" {{ 'selected' if dias == 7 else '' }}>Últimos 7 días</option>
+      <option value="30" {{ 'selected' if dias == 30 else '' }}>Últimos 30 días</option>
+      <option value="60" {{ 'selected' if dias == 60 else '' }}>Últimos 60 días</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="enfermedad">Enfermedad</label>
+    <select name="enfermedad" id="enfermedad">
+      <option value="">Todas</option>
+      {% for e in enfermedades %}
+      <option value="{{ e.id }}" {{ 'selected' if disease_id == e.id else '' }}>{{ e.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn btn-primary">Aplicar</button>
+  <button type="button" class="btn" id="btn-reset">Restablecer</button>
+</form>
+
+<div class="mapa-grid">
+  <div class="card card-map">
+    <div class="card-header">
+      <div>
+        <h3>Visor Cartográfico</h3>
+        <p class="subtitle">Incidencia por municipio (casos por 100k hab.) · límites oficiales de INEGI, los 51 municipios</p>
+      </div>
+      <div class="vista-toggle" id="vista-toggle" role="group" aria-label="Tipo de visualización">
+        <button type="button" class="vista-btn is-active" data-vista="coropleta">Coropleta</button>
+        <button type="button" class="vista-btn" data-vista="burbujas">Burbujas</button>
+        <button type="button" class="vista-btn" data-vista="ambas">Ambas</button>
+      </div>
+    </div>
+    <div id="mapa-chart" style="height:460px;"></div>
+
+    <div class="mapa-timeline" id="mapa-timeline">
+      <button type="button" class="btn btn-play" id="btn-play">▶ Reproducir</button>
+      <input type="range" id="timeline-slider" min="0" max="0" value="0" step="1"
+             aria-label="Línea de tiempo">
+      <div class="timeline-meta">
+        <strong id="timeline-fecha">—</strong>
+        <span id="timeline-ventana"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div><h3>Resumen de zona</h3></div></div>
+    <div class="zona-panel" id="zona-panel">
+      <div class="zona-placeholder">Selecciona un municipio en el mapa para ver su detalle.</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://code.highcharts.com/maps/highmaps.js"></script>
+<!-- highcharts-more habilita el tipo mapbubble; exporting + offline-exporting
+     hacen la descarga del lado del cliente (sin mandar la grafica al servidor
+     publico de Highcharts), y export-data agrega CSV / XLS / ver tabla. -->
+<script src="https://code.highcharts.com/highcharts-more.js"></script>
+<script src="https://code.highcharts.com/maps/modules/exporting.js"></script>
+<script src="https://code.highcharts.com/maps/modules/offline-exporting.js"></script>
+<!-- export-data va bajo /modules/ y no bajo /maps/modules/ como los dos de
+     arriba: es la ruta que documenta Highcharts y la unica desde la que este
+     modulo llega a registrarse. Si no cargara, el menu simplemente aparece sin
+     las opciones de CSV/XLS/tabla, sin romper nada. -->
+<script src="https://code.highcharts.com/modules/export-data.js"></script>
+<script>
+  // El menu de exportacion viene en ingles de fabrica; el resto de la app esta
+  // en espanol.
+  Highcharts.setOptions({
+    lang: {
+      viewFullscreen: 'Ver en pantalla completa',
+      exitFullscreen: 'Salir de pantalla completa',
+      printChart: 'Imprimir mapa',
+      downloadPNG: 'Descargar imagen PNG',
+      downloadJPEG: 'Descargar imagen JPEG',
+      downloadSVG: 'Descargar vector SVG',
+      downloadCSV: 'Descargar CSV',
+      downloadXLS: 'Descargar XLS',
+      viewData: 'Ver tabla de datos',
+      hideData: 'Ocultar tabla de datos',
+      contextButtonTitle: 'Exportar'
+    }
+  });
+
+  const NIVEL_COLOR = {
+    baja: '#a8c8f0', moderada: '#f4d93e', alta: '#f2994a',
+    muy_alta: '#eb5757', critica: '#9b1c1c'
+  };
+
+  // Fuente unica de los cortes del semaforo en esta pantalla: alimenta el
+  // colorAxis y tambien clasifica los cuadros de la linea de tiempo, para no
+  // tener una tercera copia de los umbrales. Tiene que seguir cuadrando con
+  // BUCKETS en queries.py.
+  const DATA_CLASSES = [
+    { to: 15, color: NIVEL_COLOR.baja, name: 'Baja', key: 'baja' },
+    { from: 15, to: 30, color: NIVEL_COLOR.moderada, name: 'Moderada', key: 'moderada' },
+    { from: 30, to: 45, color: NIVEL_COLOR.alta, name: 'Alta', key: 'alta' },
+    { from: 45, to: 60, color: NIVEL_COLOR.muy_alta, name: 'Muy alta', key: 'muy_alta' },
+    { from: 60, color: NIVEL_COLOR.critica, name: 'Crítica', key: 'critica' }
+  ];
+
+  const COLOR_SIN_VALOR = '#eef1f5';
+  const COLOR_BURBUJA = '#1b4f9c';
+  const DURACION_RECORRIDO_MS = 9000;
+
+  let chart = null;
+  let datos = null;          // respuesta completa de /api/mapa
+  let porCode = {};          // region_code -> municipio del periodo
+  let cuadro = 0;            // indice dentro de serie.fechas
+  let vista = 'coropleta';
+  let zonaSeleccionada = null;
+  let timerId = null;
+  let etiquetasVisibles = true;
+
+  // El recorrido dura mas o menos lo mismo sin importar el periodo: 7 cuadros
+  // a 220 ms se acababan antes de que alcanzaras a verlos, y 60 tardaban el
+  // triple que 30.
+  function msPorCuadro() {
+    const n = datos.serie.fechas.length;
+    return Math.min(700, Math.max(120, Math.round(DURACION_RECORRIDO_MS / n)));
+  }
+
+  const TEXTO_ETIQUETAS = {
+    ocultar: 'Ocultar nombres de municipios',
+    mostrar: 'Mostrar nombres de municipios'
+  };
+
+  function textoEtiquetas() {
+    return etiquetasVisibles ? TEXTO_ETIQUETAS.ocultar : TEXTO_ETIQUETAS.mostrar;
+  }
+
+  function claseDe(valor) {
+    for (const c of DATA_CLASSES) {
+      const bajo = c.from === undefined || valor >= c.from;
+      const alto = c.to === undefined || valor < c.to;
+      if (bajo && alto) return c;
+    }
+    return DATA_CLASSES[DATA_CLASSES.length - 1];
+  }
+
+  function esUltimoCuadro() {
+    return !datos || cuadro === datos.serie.fechas.length - 1;
+  }
+
+  // Valores del municipio en el cuadro actual. En el ultimo cuadro la ventana
+  // movil coincide con el periodo del filtro, asi que esto devuelve
+  // exactamente lo que ya trae /api/mapa para el mapa estatico.
+  function valoresCuadro(code) {
+    const base = porCode[code];
+    const s = datos.serie.series[code];
+    if (!s) return { casos: 0, incidencia: 0, variacion: 0, nombre: base ? base.nombre : code };
+    // casos, incidencia y variacion los calcula queries.py cuadro por cuadro,
+    // con la misma definicion de ventana previa que get_mapa_municipios: en el
+    // ultimo cuadro coinciden exactamente con el mapa estatico.
+    return {
+      nombre: base ? base.nombre : code,
+      casos: s.casos[cuadro],
+      incidencia: s.incidencia[cuadro],
+      variacion: s.variacion[cuadro]
+    };
+  }
+
+  function datosCoropleta() {
+    return Object.keys(datos.serie.series).map(function (code) {
+      const v = valoresCuadro(code);
+      return {
+        region_code: code, nombre: v.nombre, casos: v.casos,
+        incidencia: v.incidencia,
+        value: vista === 'burbujas' ? null : v.incidencia
+      };
+    });
+  }
+
+  function datosBurbujas() {
+    return Object.keys(datos.serie.series).map(function (code) {
+      const v = valoresCuadro(code);
+      const base = porCode[code];
+      if (!base || v.casos <= 0) return null;   // sin casos no se dibuja punto
+      return {
+        region_code: code, nombre: v.nombre, lat: base.lat, lon: base.lon,
+        casos: v.casos, incidencia: v.incidencia,
+        z: v.casos, value: v.incidencia
+      };
+    }).filter(Boolean);
+  }
+
+  function mostrarZona(code) {
+    zonaSeleccionada = code;
+    const base = porCode[code];
+    if (!base) return;
+    const v = valoresCuadro(code);
+    const clase = claseDe(v.incidencia);
+    const variacionTxt = v.variacion == null
+      ? '<span class="zona-stat-value">—</span>'
+      : `<span class="zona-stat-value ${v.variacion >= 0 ? 'positivo' : 'negativo'}">` +
+        `${v.variacion >= 0 ? '+' : ''}${v.variacion}%</span>`;
+    const nota = esUltimoCuadro() ? '' :
+      `<div class="zona-cuadro-nota">Acumulado al ${datos.serie.fechas[cuadro]} · ` +
+      `día ${cuadro + 1} de ${datos.serie.dias_periodo} del período</div>`;
+
+    document.getElementById('zona-panel').innerHTML = `
+      <div class="zona-nombre">${v.nombre}</div>
+      <span class="badge" style="background:${clase.color}22;color:${clase.color};border:1px solid ${clase.color}55;">${clase.name}</span>
+      ${nota}
+      <div class="zona-stats">
+        <div><div class="zona-stat-label">Casos totales</div><div class="zona-stat-value">${v.casos.toLocaleString()}</div></div>
+        <div><div class="zona-stat-label">Incidencia (100k)</div><div class="zona-stat-value">${v.incidencia}</div></div>
+        <div><div class="zona-stat-label">Variación</div>${variacionTxt}</div>
+      </div>
+      <div class="zona-trend-title">Tendencia (últimos 14 días)</div>
+      <div id="zona-chart" style="height:120px;"></div>
+    `;
+    const dias = base.tendencia.map(function (t) { return t.fecha.slice(5); });
+    const valores = base.tendencia.map(function (t) { return t.total; });
+    Highcharts.chart('zona-chart', {
+      chart: { type: 'area', backgroundColor: 'transparent', margin: [8, 8, 24, 30] },
+      title: { text: null },
+      credits: { enabled: false },
+      legend: { enabled: false },
+      exporting: { enabled: false },
+      xAxis: { categories: dias, labels: { style: { fontSize: '9px' } }, tickInterval: 3 },
+      yAxis: { title: { text: null }, labels: { style: { fontSize: '9px' } } },
+      series: [{ data: valores, color: clase.color }]
+    });
+  }
+
+  function subtituloExport() {
+    const f = datos.serie.fechas[cuadro];
+    const enf = document.getElementById('enfermedad');
+    const nombreEnf = enf.value ? enf.options[enf.selectedIndex].text : 'todas las enfermedades';
+    return `Acumulado del período de ${datos.serie.dias_periodo} días al ${f} · ${nombreEnf}`;
+  }
+
+  function dibujarMapa(geojson) {
+    const mapData = Highcharts.geojson(geojson);
+    mapData.forEach(function (d) { d.region_code = d.properties.region_code; });
+
+    const series = [{
+      type: 'map',
+      mapData: mapData,
+      data: datosCoropleta(),
+      joinBy: 'region_code',
+      name: 'Incidencia (100k)',
+      nullColor: COLOR_SIN_VALOR,
+      states: { hover: { color: '#1b6ce3' } },
+      dataLabels: { enabled: etiquetasVisibles, format: '{point.nombre}', style: { fontSize: '9px', fontWeight: '600' } },
+      tooltip: { pointFormat: '<b>{point.nombre}</b><br>Casos: {point.casos}<br>Incidencia: {point.incidencia} /100k' },
+      point: { events: { click: function () { mostrarZona(this.region_code); } } }
+    }];
+
+    if (vista !== 'coropleta') {
+      series.push({
+        type: 'mapbubble',
+        name: 'Casos',
+        data: datosBurbujas(),
+        // En "ambas" el color ya lo lleva la coropleta, asi que la burbuja va
+        // de un solo color y solo comunica volumen con el tamano. En modo
+        // burbujas toma el colorAxis porque es la unica capa con dato.
+        colorAxis: vista === 'burbujas' ? 0 : false,
+        color: vista === 'burbujas' ? undefined : COLOR_BURBUJA,
+        opacity: vista === 'burbujas' ? 0.9 : 0.55,
+        minSize: 4,
+        maxSize: '14%',
+        zMin: 0,
+        borderColor: '#ffffff',
+        borderWidth: 1,
+        // Sin esto Highcharts engancha el punto MAS CERCANO al cursor aunque
+        // estes sobre el mapa y no sobre la burbuja: bastaba tocar cualquier
+        // parte del estado para que se abriera el tooltip de una burbuja lejana.
+        // En false solo responde cuando el cursor esta de verdad dentro.
+        stickyTracking: false,
+        dataLabels: { enabled: false },
+        tooltip: { pointFormat: '<b>{point.nombre}</b><br>Casos: {point.casos}<br>Incidencia: {point.incidencia} /100k' },
+        point: { events: { click: function () { mostrarZona(this.region_code); } } }
+      });
+    }
+
+    chart = Highcharts.mapChart('mapa-chart', {
+      chart: { map: mapData, backgroundColor: '#ffffff' },
+      title: { text: null },
+      credits: { enabled: false },
+      mapNavigation: { enabled: true, buttonOptions: { verticalAlign: 'bottom' } },
+      legend: {
+        align: 'right', verticalAlign: 'top', layout: 'vertical',
+        // y: deja libre la esquina donde el modulo exporting pone su boton de
+        // menu, que si no queda encimado sobre el titulo de la leyenda.
+        floating: true, y: 34, backgroundColor: 'rgba(255,255,255,0.9)',
+        title: { text: 'Incidencia' }
+      },
+      colorAxis: { dataClasses: DATA_CLASSES },
+      exporting: {
+        enabled: true,
+        filename: 'mapa-epidemiologico-nl',
+        // Sin respaldo al servidor publico de Highcharts: la exportacion se
+        // resuelve en el navegador y los datos no salen de la maquina.
+        fallbackToExportServer: false,
+        menuItemDefinitions: {
+          alternarEtiquetas: {
+            text: textoEtiquetas(),
+            onclick: function () {
+              etiquetasVisibles = !etiquetasVisibles;
+              this.series[0].update({ dataLabels: { enabled: etiquetasVisibles } });
+              // El menu ya esta construido en el DOM y Highcharts no lo vuelve
+              // a generar, asi que la etiqueta se cambia a mano.
+              document.querySelectorAll('.highcharts-menu-item').forEach(function (el) {
+                if (el.textContent === TEXTO_ETIQUETAS.ocultar ||
+                    el.textContent === TEXTO_ETIQUETAS.mostrar) {
+                  el.textContent = textoEtiquetas();
+                }
+              });
+            }
+          }
+        },
+        buttons: {
+          contextButton: {
+            menuItems: ['viewFullscreen', 'alternarEtiquetas', 'separator',
+                        'printChart', 'separator',
+                        'downloadPNG', 'downloadJPEG', 'downloadSVG', 'separator',
+                        'downloadCSV', 'downloadXLS', 'viewData']
+          }
+        },
+        chartOptions: {
+          title: { text: 'Mapa epidemiológico · Nuevo León' },
+          subtitle: { text: subtituloExport() }
+        }
+      },
+      series: series
+    });
+  }
+
+  function pintarCuadro() {
+    if (!chart || !datos) return;
+    chart.series[0].setData(datosCoropleta(), false);
+    if (chart.series[1]) chart.series[1].setData(datosBurbujas(), false);
+    chart.update({ exporting: { chartOptions: { subtitle: { text: subtituloExport() } } } }, false);
+    chart.redraw();
+
+    document.getElementById('timeline-fecha').textContent = datos.serie.fechas[cuadro];
+    document.getElementById('timeline-ventana').textContent =
+      `día ${cuadro + 1} de ${datos.serie.dias_periodo}` +
+      (esUltimoCuadro() ? ' · al corte' : '');
+    if (zonaSeleccionada) mostrarZona(zonaSeleccionada);
+  }
+
+  function irACuadro(i) {
+    cuadro = Math.max(0, Math.min(i, datos.serie.fechas.length - 1));
+    document.getElementById('timeline-slider').value = cuadro;
+    pintarCuadro();
+  }
+
+  function detener() {
+    if (timerId) { clearInterval(timerId); timerId = null; }
+    document.getElementById('btn-play').textContent = '▶ Reproducir';
+  }
+
+  function reproducir() {
+    if (timerId) { detener(); return; }
+    if (esUltimoCuadro()) irACuadro(0);   // desde el final, vuelve a empezar
+    document.getElementById('btn-play').textContent = '⏸ Pausar';
+    timerId = setInterval(function () {
+      if (esUltimoCuadro()) { detener(); return; }
+      irACuadro(cuadro + 1);
+    }, msPorCuadro());
+  }
+
+  function cargarYDibujar(dias, enfermedad) {
+    const geoUrl = '{{ url_for("static", filename="js/nl_municipios.json") }}';
+    const apiUrl = new URL('{{ url_for("api_mapa") }}', window.location.origin);
+    apiUrl.searchParams.set('dias', dias);
+    if (enfermedad) apiUrl.searchParams.set('enfermedad', enfermedad);
+
+    detener();
+    Promise.all([
+      window._nlGeojsonCache || fetch(geoUrl).then(function (r) { return r.json(); }),
+      fetch(apiUrl).then(function (r) { return r.json(); })
+    ]).then(function (results) {
+      window._nlGeojsonCache = Promise.resolve(results[0]);
+      window._nlGeojson = results[0];
+      datos = results[1];
+      porCode = {};
+      datos.municipios.forEach(function (m) { porCode[m.region_code] = m; });
+      cuadro = datos.serie.fechas.length - 1;
+
+      const slider = document.getElementById('timeline-slider');
+      slider.max = datos.serie.fechas.length - 1;
+      slider.value = cuadro;
+
+      if (chart) { chart.destroy(); chart = null; }
+      dibujarMapa(results[0]);
+
+      if (!zonaSeleccionada && datos.municipios.length) {
+        const destacado = datos.municipios.reduce(function (a, b) { return b.casos > a.casos ? b : a; });
+        zonaSeleccionada = destacado.region_code;
+      }
+      pintarCuadro();
+    });
+  }
+
+  function redibujarVista() {
+    if (!datos || !window._nlGeojson) return;
+    if (chart) { chart.destroy(); chart = null; }
+    dibujarMapa(window._nlGeojson);
+    pintarCuadro();
+  }
+
+  cargarYDibujar({{ dias }}, {{ disease_id or 'null' }});
+
+  document.getElementById('filtros-form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    const dias = document.getElementById('dias').value;
+    const enfermedad = document.getElementById('enfermedad').value;
+    cargarYDibujar(dias, enfermedad || null);
+    const pageUrl = new URL(window.location);
+    pageUrl.searchParams.set('dias', dias);
+    if (enfermedad) { pageUrl.searchParams.set('enfermedad', enfermedad); } else { pageUrl.searchParams.delete('enfermedad'); }
+    window.history.replaceState({}, '', pageUrl);
+  });
+
+  document.getElementById('btn-reset').addEventListener('click', function () {
+    document.getElementById('dias').value = '30';
+    document.getElementById('enfermedad').value = '';
+    document.getElementById('filtros-form').dispatchEvent(new Event('submit'));
+  });
+
+  document.getElementById('timeline-slider').addEventListener('input', function () {
+    detener();
+    irACuadro(parseInt(this.value, 10));
+  });
+
+  document.getElementById('btn-play').addEventListener('click', reproducir);
+
+  document.getElementById('vista-toggle').addEventListener('click', function (ev) {
+    const btn = ev.target.closest('.vista-btn');
+    if (!btn || btn.dataset.vista === vista) return;
+    vista = btn.dataset.vista;
+    this.querySelectorAll('.vista-btn').forEach(function (b) {
+      b.classList.toggle('is-active', b.dataset.vista === vista);
+    });
+    redibujarVista();
+  });
+</script>
+{% endblock %}

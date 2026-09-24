@@ -1,0 +1,125 @@
+{% extends "base_app.html" %}
+{% block title %}Nuevo reporte{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Nuevo reporte epidemiológico</h1>
+    <p class="subtitle">Captura un caso. Solo enfermedad, municipio y fecha de reporte son
+      obligatorios: el resto del expediente puede completarse después.</p>
+  </div>
+</div>
+
+{% if errores %}
+<div class="alert alert-error">
+  <ul>{% for e in errores %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div class="card form-card">
+  <form method="post">
+    <div class="field">
+      <label for="disease_id">Enfermedad <span class="req">*</span></label>
+      <select id="disease_id" name="disease_id" required>
+        <option value="">Selecciona...</option>
+        {% for d in catalogos.enfermedades %}
+        <option value="{{ d.id }}" {{ 'selected' if form.get('disease_id') == d.id|string else '' }}>{{ d.name }}</option>
+        {% endfor %}
+      </select>
+      <p class="field-hint">Solo aparecen las enfermedades vigentes del catálogo. Si falta
+        alguna, regístrala primero en <a href="{{ url_for('enfermedades') }}">Enfermedades</a>.</p>
+    </div>
+
+    <div class="field">
+      <label for="region_id">Municipio <span class="req">*</span></label>
+      <select id="region_id" name="region_id" required>
+        <option value="">Selecciona...</option>
+        {% for m in catalogos.municipios %}
+        <option value="{{ m.id }}" {{ 'selected' if form.get('region_id') == m.id|string else '' }}>{{ m.name }}</option>
+        {% endfor %}
+      </select>
+      <p class="field-hint">Los 51 municipios de Nuevo León.</p>
+    </div>
+
+    <div class="form-fila">
+      <div class="field">
+        <label for="report_date">Fecha de reporte <span class="req">*</span></label>
+        <input type="date" id="report_date" name="report_date" required
+               max="{{ catalogos.hoy }}"
+               value="{{ form.get('report_date') or catalogos.hoy }}">
+      </div>
+      <div class="field">
+        <label for="onset_date">Inicio de síntomas</label>
+        <input type="date" id="onset_date" name="onset_date"
+               max="{{ catalogos.hoy }}" value="{{ form.get('onset_date', '') }}">
+        <p class="field-hint">No puede ser posterior a la fecha de reporte.</p>
+      </div>
+    </div>
+
+    <div class="form-fila">
+      <div class="field">
+        <label for="age">Edad</label>
+        <input type="number" id="age" name="age" min="0" max="120"
+               value="{{ form.get('age', '') }}" placeholder="0 a 120">
+      </div>
+      <div class="field">
+        <label for="sex">Sexo</label>
+        <select id="sex" name="sex">
+          <option value="">Sin especificar</option>
+          {% for clave, etiqueta in catalogos.sexos.items() %}
+          <option value="{{ clave }}" {{ 'selected' if form.get('sex') == clave else '' }}>{{ etiqueta }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-fila">
+      <div class="field">
+        <label for="test_result">Resultado de prueba</label>
+        <select id="test_result" name="test_result">
+          <option value="">Sin especificar</option>
+          {% for clave, etiqueta in catalogos.resultados.items() %}
+          <option value="{{ clave }}" {{ 'selected' if form.get('test_result') == clave else '' }}>{{ etiqueta }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="severity">Severidad</label>
+        <select id="severity" name="severity">
+          <option value="">Sin especificar</option>
+          {% for clave, etiqueta in catalogos.severidades.items() %}
+          <option value="{{ clave }}" {{ 'selected' if form.get('severity') == clave else '' }}>{{ etiqueta }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-fila">
+      <div class="field">
+        <label for="latitude">Latitud</label>
+        <input type="text" id="latitude" name="latitude" inputmode="decimal"
+               value="{{ form.get('latitude', '') }}" placeholder="ej. 25.686100">
+      </div>
+      <div class="field">
+        <label for="longitude">Longitud</label>
+        <input type="text" id="longitude" name="longitude" inputmode="decimal"
+               value="{{ form.get('longitude', '') }}" placeholder="ej. -100.316100">
+      </div>
+    </div>
+    <p class="field-hint">La ubicación es opcional, pero va completa o no va: el esquema
+      rechaza una coordenada a medias.</p>
+
+    <div class="form-nota">
+      <p><strong>El reporte entra como «pendiente».</strong> Un caso capturado queda a la espera
+        de validación, no se da por confirmado. Las pantallas cuentan tanto los pendientes como
+        los validados, así que se verá reflejado de inmediato en el panorama y en el mapa.</p>
+      <p>Queda firmado con tu usuario en <code>reported_by</code> y registrado en la bitácora
+        de auditoría.</p>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Guardar reporte</button>
+      <a href="{{ url_for('dashboard') }}" class="btn">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
