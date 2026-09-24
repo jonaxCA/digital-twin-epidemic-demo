@@ -1,9 +1,0 @@
-[
-  {"id": "LOG-2026-9842", "fecha": "2026-09-02 14:22", "usuario": "Ricardo Smith", "modulo": "Simulaciones", "accion": "Ejecucion", "descripcion": "Inicio simulacion de Influenza A", "ip": "192.168.1.45", "estado": "Exitoso", "critica": true},
-  {"id": "LOG-2026-9841", "fecha": "2026-09-02 14:15", "usuario": "Ing. Marcos Garcia", "modulo": "Usuarios", "accion": "Edicion", "descripcion": "Modifico permisos de Analista", "ip": "192.168.1.12", "estado": "Exitoso", "critica": true},
-  {"id": "LOG-2026-9840", "fecha": "2026-09-02 13:50", "usuario": "Desconocido", "modulo": "Sesion", "accion": "Login", "descripcion": "Intento de acceso fallido", "ip": "185.23.1.2", "estado": "Fallido", "critica": true},
-  {"id": "LOG-2026-9839", "fecha": "2026-09-02 11:30", "usuario": "Ana Lee", "modulo": "Reportes", "accion": "Exportacion", "descripcion": "Exporto reporte de incidencia semanal", "ip": "10.0.0.55", "estado": "Exitoso", "critica": false},
-  {"id": "LOG-2026-9838", "fecha": "2026-09-02 10:12", "usuario": "Daniela Hernandez", "modulo": "Enfermedades", "accion": "Alta", "descripcion": "Registro nueva enfermedad en catalogo", "ip": "10.0.0.31", "estado": "Exitoso", "critica": false},
-  {"id": "LOG-2026-9837", "fecha": "2026-09-02 09:04", "usuario": "Laura Mendoza", "modulo": "Sesion", "accion": "Login", "descripcion": "Inicio de sesion desde app Android", "ip": "10.0.2.88", "estado": "Exitoso", "critica": false},
-  {"id": "LOG-2026-9836", "fecha": "2026-09-01 22:47", "usuario": "Desconocido", "modulo": "Sesion", "accion": "Login", "descripcion": "Intento de acceso fallido", "ip": "185.23.1.2", "estado": "Fallido", "critica": true}
-]

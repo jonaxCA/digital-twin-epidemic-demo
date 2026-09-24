@@ -1,7 +1,13 @@
 import os
 
+from dotenv import load_dotenv
+
+# Se carga aqui porque Config se lee ANTES de importar backend_web (que es
+# donde db.py hacia load_dotenv en el monolito plano). Sin esto, SECRET_KEY
+# tomaria el valor de desarrollo sin avisar.
+load_dotenv()
+
+
 class Config:
-    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-cambiar-en-prod")
-    API_URL = os.environ.get("API_URL", "http://localhost:8000/api/v1")
-    USAR_FIXTURES = True          # False cuando exista la API real
-    DATA_DIR = "app/data"
+    # Mismo secreto para la cookie de flash() y para firmar el JWT, como en app.py.
+    SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "dev-secret-cambiar-en-despliegue")

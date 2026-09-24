@@ -1,100 +1,22 @@
-{% extends "base.html" %}
-{% from "macros.html" import kpi, badge %}
-
-{% block titulo %}Panorama epidemiológico{% endblock %}
-{% block encabezado %}Panorama epidemiológico{% endblock %}
-{% block subtitulo %}Resumen de indicadores críticos y zonas de riesgo activo.{% endblock %}
-
-{% block estado_topbar %}
-  {% if session.usuario %}
-  <span class="topbar__estado"><span class="topbar__punto"></span> Datos actualizados hace 12 s</span>
-  {% endif %}
-{% endblock %}
-
-{% block acciones %}
-  {# RF-G11: la versión pública ve el tablero sin acciones de exportación. #}
-  {% if session.usuario %}
-    <a class="btn btn--claro" href="#">Exportar CSV</a>
-    <a class="btn btn--primario" href="#">Nuevo reporte</a>
-  {% endif %}
-{% endblock %}
-
-{% block contenido %}
-
-<div class="kpis">
-  {{ kpi('Casos activos', indicadores.casos_activos.valor,
-         delta=indicadores.casos_activos.delta,
-         tendencia=indicadores.casos_activos.tendencia,
-         nota=indicadores.casos_activos.nota) }}
-
-  {{ kpi('Tasa de incidencia', indicadores.tasa_incidencia.valor,
-         delta=indicadores.tasa_incidencia.delta,
-         tendencia=indicadores.tasa_incidencia.tendencia,
-         nota=indicadores.tasa_incidencia.nota) }}
-
-  {{ kpi('Zonas en riesgo', indicadores.zonas_riesgo.valor,
-         delta=indicadores.zonas_riesgo.delta,
-         tendencia=indicadores.zonas_riesgo.tendencia,
-         nota=indicadores.zonas_riesgo.nota) }}
-
-  {{ kpi('Simulaciones', indicadores.simulaciones.valor,
-         delta=indicadores.simulaciones.delta,
-         tendencia=indicadores.simulaciones.tendencia,
-         nota=indicadores.simulaciones.nota) }}
+{% extends "base_app.html" %}
+{% block title %}Panorama Epidemiológico{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Panorama Epidemiológico</h1>
+    <p class="subtitle">Resumen de indicadores críticos y zonas de riesgo activo · Nuevo León</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{{ url_for('main.export_resumen_csv') }}">⬇ Exportar CSV</a>
+    <a class="btn btn-primary" href="{{ url_for('main.reporte_nuevo') }}">+ Nuevo Reporte</a>
+  </div>
 </div>
 
-<div class="rejilla-tablero">
+{% with mensajes = get_flashed_messages(with_categories=true) %}
+  {% for categoria, mensaje in mensajes %}
+  <div class="alert alert-{{ 'error' if categoria == 'error' else 'ok' }}">{{ mensaje }}</div>
+  {% endfor %}
+{% endwith %}
 
-  <section class="tarjeta">
-    <div class="tarjeta__cabecera">
-      <div>
-        <h2>Monitoreo en tiempo real</h2>
-        <p>Curva epidémica consolidada · últimos 30 días</p>
-      </div>
-    </div>
-    <div class="tarjeta__cuerpo">
-      <div id="grafica-curva" class="grafica"></div>
-    </div>
-  </section>
-
-  <section class="tarjeta">
-    <div class="tarjeta__cabecera">
-      <div>
-        <h2>Resumen de situación</h2>
-        <p>Alertas principales por patología</p>
-      </div>
-    </div>
-    <div class="tabla-scroll">
-      <table class="tabla">
-        <thead>
-          <tr><th>Enfermedad</th><th>Estado</th><th class="num">Incidencia</th></tr>
-        </thead>
-        <tbody>
-          {% for fila in indicadores.resumen %}
-          <tr>
-            <td class="fuerte">{{ fila.enfermedad }}</td>
-            <td>{{ badge(fila.estado) }}</td>
-            <td class="num">{{ fila.incidencia }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% if puede('monitoreo:ver') %}
-    <div class="paginacion">
-      <span></span>
-      <a href="{{ url_for('main.monitoreo') }}">Ver reporte completo</a>
-    </div>
-    {% endif %}
-  </section>
-
-</div>
-{% endblock %}
-
-{% block scripts %}
-<script src="https://code.highcharts.com/highcharts.js"></script>
-<script src="{{ url_for('static', filename='js/graficas.js') }}"></script>
-<script>
-  curvaEpidemica('grafica-curva', {{ series.daily_data | tojson }});
-</script>
+{% include "_panorama.html" %}
 {% endblock %}

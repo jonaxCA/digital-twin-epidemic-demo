@@ -1,0 +1,104 @@
+{# Requiere en el contexto: indicadores, situacion, curva, report_link #}
+<div class="stat-grid">
+  <div class="card stat-card">
+    <div class="stat-label"><span>CASOS ACTIVOS</span> <span>🦠</span></div>
+    <div class="stat-value">{{ "{:,}".format(indicadores.casos_activos) }}</div>
+    <div class="stat-trend">
+      <span class="trend-badge {{ 'trend-up' if indicadores.casos_pct >= 0 else 'trend-down' }}">
+        {{ '+' if indicadores.casos_pct >= 0 else '' }}{{ indicadores.casos_pct }}%
+      </span>
+      <span>vs sem. anterior</span>
+    </div>
+  </div>
+
+  <div class="card stat-card">
+    <div class="stat-label"><span>TASA DE INCIDENCIA</span> <span>📊</span></div>
+    <div class="stat-value">{{ indicadores.tasa_incidencia }}<span style="font-size:14px;font-weight:600;color:var(--text-secondary)"> /100k</span></div>
+    <div class="stat-trend">
+      <span class="trend-badge {{ 'trend-up' if indicadores.tasa_pct >= 0 else 'trend-down' }}">
+        {{ '+' if indicadores.tasa_pct >= 0 else '' }}{{ indicadores.tasa_pct }}%
+      </span>
+      <span>vs sem. anterior</span>
+    </div>
+  </div>
+
+  <div class="card stat-card">
+    <div class="stat-label"><span>ZONAS EN RIESGO</span> <span>⚠️</span></div>
+    <div class="stat-value">{{ indicadores.zonas_en_riesgo }}</div>
+    <div class="stat-trend">
+      <span class="risk-badge">Crítico</span>
+      <span>de 10 municipios con datos</span>
+    </div>
+  </div>
+
+  <div class="card stat-card">
+    <div class="stat-label"><span>SIMULACIONES</span> <span>⟳</span></div>
+    <div class="stat-value">{{ indicadores.simulaciones_activas }}</div>
+    <div class="stat-trend">
+      <span class="sim-badge">Activas</span>
+      <span>en ejecución/cola</span>
+    </div>
+  </div>
+</div>
+
+<div class="main-grid">
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <h3>Monitoreo en Tiempo Real</h3>
+        <p class="subtitle">Curva epidémica consolidada · Últimos 30 días · Nuevo León</p>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <div id="curva-chart" style="height:280px;"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <h3>Resumen de Situación</h3>
+        <p class="subtitle">Alertas principales por patología</p>
+      </div>
+    </div>
+    <table class="situacion-table">
+      <thead>
+        <tr><th>Enfermedad</th><th>Estado</th><th>Casos (7d)</th></tr>
+      </thead>
+      <tbody>
+        {% for row in situacion %}
+        <tr>
+          <td>{{ row.enfermedad }}</td>
+          <td><span class="badge badge-{{ row.estado|lower }}">{{ row.estado }}</span></td>
+          <td>{{ "{:,}".format(row.incidencia) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <a class="card-footer-link" href="{{ report_link }}">Ver reporte completo →</a>
+  </div>
+</div>
+
+<script src="https://code.highcharts.com/highcharts.js"></script>
+<script>
+  const curvaData = {{ curva|tojson }};
+  Highcharts.chart('curva-chart', {
+    chart: { type: 'line', backgroundColor: 'transparent' },
+    title: { text: null },
+    credits: { enabled: false },
+    xAxis: {
+      categories: curvaData.map(function (p) { return p.fecha.slice(5); }),
+      tickInterval: 4,
+      labels: { style: { fontSize: '11px' } }
+    },
+    yAxis: { title: { text: null }, gridLineDashStyle: 'Dash' },
+    legend: { enabled: false },
+    tooltip: { valueSuffix: ' casos' },
+    series: [{
+      name: 'Casos diarios',
+      data: curvaData.map(function (p) { return p.total; }),
+      color: '#1b6ce3',
+      marker: { enabled: false }
+    }]
+  });
+</script>

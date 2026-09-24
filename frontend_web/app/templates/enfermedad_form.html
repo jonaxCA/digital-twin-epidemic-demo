@@ -1,0 +1,136 @@
+{% extends "base_app.html" %}
+{% set edicion = enfermedad and enfermedad.id %}
+{% block title %}{{ 'Editar enfermedad' if edicion else 'Nueva enfermedad' }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ 'Editar enfermedad' if edicion else 'Nueva enfermedad' }}</h1>
+    <p class="subtitle">
+      {% if edicion %}
+        Ajusta la ficha y los parámetros que el motor de simulación usa para esta enfermedad.
+      {% else %}
+        Registra un padecimiento en el catálogo para que pueda usarse en el monitoreo
+        y en las simulaciones.
+      {% endif %}
+    </p>
+  </div>
+</div>
+
+{% if errores %}
+<div class="alert alert-error">
+  <ul>{% for e in errores %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div class="card form-card">
+  <form method="post">
+    <div class="field">
+      <label for="code">Código {% if not edicion %}<span class="req">*</span>{% endif %}</label>
+      <input type="text" id="code" name="code" maxlength="30"
+             value="{{ enfermedad.code if enfermedad else '' }}"
+             placeholder="ej. DENGUE_GRAVE"
+             {% if edicion %}disabled{% else %}required{% endif %}>
+      {% if edicion %}
+      <p class="field-hint">El código no se edita: es la llave con la que ya están ligados los
+        casos capturados, los escenarios y los CSV que se hayan exportado.</p>
+      {% else %}
+      <p class="field-hint">Identificador único e inmutable del catálogo. Se normaliza solo:
+        acentos, espacios y signos se convierten (“Dengue grave” → <code>DENGUE_GRAVE</code>).</p>
+      {% endif %}
+    </div>
+
+    <div class="field">
+      <label for="name">Nombre <span class="req">*</span></label>
+      <input type="text" id="name" name="name" required maxlength="120"
+             value="{{ enfermedad.name if enfermedad else '' }}"
+             placeholder="ej. Dengue grave">
+      <p class="field-hint">Es el nombre que se ve en el mapa, en monitoreo y en los filtros.</p>
+    </div>
+
+    <div class="field">
+      <label for="description">Descripción</label>
+      <textarea id="description" name="description" rows="3"
+                placeholder="Opcional: para qué sirve esta entrada, origen de los parámetros, notas de calibración.">{{ enfermedad.description if enfermedad else '' }}</textarea>
+    </div>
+
+    <h3 class="form-seccion">Parámetros de simulación</h3>
+    <div class="form-nota">
+      <p><strong>Cada valor se guarda con su fuente.</strong> Si no tienes una referencia,
+        marca la casilla <em>Supuesto</em>: el sistema lo registra como tal y lo muestra
+        marcado en los resultados de cada simulación. Lo que no se admite es un número
+        sin una cosa ni la otra.</p>
+      <p>Puedes dejarlos vacíos y capturarlos después. Mientras falte alguno de los seis,
+        la enfermedad <strong>no se puede simular</strong> y así aparece en el catálogo.</p>
+    </div>
+
+    {% for p in parametros.detalle %}
+    <div class="param-fila {{ 'param-falta' if p.estado == 'falta' else '' }}">
+      <div class="param-encabezado">
+        <label for="p_{{ p.clave }}_valor">{{ p.etiqueta }}</label>
+        {% if p.estado == 'con_fuente' %}
+        <span class="badge param-pill param-con-fuente">Con fuente</span>
+        {% elif p.estado == 'supuesto' %}
+        <span class="badge param-pill param-supuesto">Supuesto</span>
+        {% elif p.estado == 'sin_fuente' %}
+        <span class="badge param-pill param-sin-fuente">Sin fuente</span>
+        {% elif p.estado == 'por_grupo' %}
+        <span class="badge param-pill param-con-fuente">Definida por grupo de edad</span>
+        {% else %}
+        <span class="badge param-pill param-falta-pill">Falta</span>
+        {% endif %}
+      </div>
+      <p class="field-hint">{{ p.ayuda }}</p>
+      <div class="param-campos">
+        <div class="param-valor">
+          <input type="number" id="p_{{ p.clave }}_valor" name="p_{{ p.clave }}_valor"
+                 value="{{ p.valor_form }}" step="{{ p.paso }}"
+                 min="{{ p.min }}" max="{{ p.max }}" placeholder="—">
+          <span class="param-unidad">{{ p.unidad }}</span>
+        </div>
+        <div class="param-fuente">
+          <input type="text" id="p_{{ p.clave }}_fuente" name="p_{{ p.clave }}_fuente"
+                 value="{{ p.fuente }}" maxlength="300"
+                 placeholder="Fuente: autor, publicación y año">
+        </div>
+        <label class="param-supuesto-check">
+          <input type="checkbox" name="p_{{ p.clave }}_supuesto"
+                 {{ 'checked' if p.supuesto else '' }}>
+          Supuesto
+        </label>
+      </div>
+    </div>
+    {% endfor %}
+
+    {% if parametros.informativos %}
+    <div class="form-nota">
+      <p><strong>Esta enfermedad trae además otros parámetros</strong> que este formulario no
+        edita y que se conservan tal cual, porque pertenecen al contrato con el motor de
+        agentes que viene en la siguiente etapa:</p>
+      <ul class="detalle-lista">
+        {% for etiqueta, valor in parametros.informativos %}
+        <li><span>{{ etiqueta }}</span><span>{{ valor }}</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if not edicion %}
+    <div class="form-nota">
+      <p><strong>Se dará de alta como activa.</strong> En este catálogo «activa» significa que la
+        entrada está vigente y puede usarse, no que la enfermedad tenga casos. Si más adelante deja
+        de servir, se retira dándola de baja, no borrándola.</p>
+      <p>La columna <strong>Actividad</strong> del listado es la que responde lo otro: se calcula
+        en cada consulta a partir de los casos capturados en Nuevo León. Una enfermedad recién
+        registrada aparecerá como <em>Sin casos</em> hasta que se reporte el primero.</p>
+    </div>
+    {% endif %}
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">
+        {{ 'Guardar cambios' if edicion else 'Registrar enfermedad' }}
+      </button>
+      <a href="{{ url_for('main.enfermedades') }}" class="btn">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

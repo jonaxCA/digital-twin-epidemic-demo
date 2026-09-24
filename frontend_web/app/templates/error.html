@@ -1,15 +1,10 @@
-{% extends "base.html" %}
-{% block titulo %}{{ codigo }}{% endblock %}
-{% block encabezado %}{{ titulo }}{% endblock %}
-
-{% block contenido %}
-<section class="tarjeta">
-  <div class="error">
-    <div>
-      <div class="error__codigo">{{ codigo }}</div>
-      <p class="error__mensaje">{{ mensaje }}</p>
-      <a class="btn btn--primario" href="{{ url_for('main.dashboard') }}">Volver al panorama</a>
-    </div>
-  </div>
-</section>
+{# Rescatada de main y adaptada al diseño de Sprint-Monolitico. #}
+{% extends "base_app.html" if current_user else "base_public.html" %}
+{% block title %}{{ codigo }}{% endblock %}
+{% block content %}
+<div class="stub-page">
+  <h2>{{ codigo }} · {{ titulo }}</h2>
+  <p>{{ mensaje }}</p>
+  <p><a class="btn btn-primary" href="{{ url_for('main.dashboard' if current_user else 'main.dashboard_publico') }}">Volver al panorama</a></p>
+</div>
 {% endblock %}

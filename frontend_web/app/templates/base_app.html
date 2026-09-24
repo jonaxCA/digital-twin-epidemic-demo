@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}EPIDEMIA{% endblock %} · Simulador de respuesta a epidemias</title>
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet" />
+  <link href="{{ url_for('static', filename='css/styles.css') }}" rel="stylesheet" />
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo-badge">⚕</div>
+        <div class="brand-text">
+          <span class="title">EPIDEMIA</span>
+          <span class="subtitle">Sistema Monolítico v0.1</span>
+        </div>
+      </div>
+      <ul class="sidebar-nav">
+        <li><a href="{{ url_for('main.dashboard') }}" class="{{ 'active' if active_nav == 'dashboard' else '' }}"><span class="nav-icon">▦</span> Dashboard</a></li>
+        <li><a href="{{ url_for('main.monitoreo') }}" class="{{ 'active' if active_nav == 'monitoreo' else '' }}"><span class="nav-icon">📈</span> Monitoreo</a></li>
+        <li><a href="{{ url_for('main.mapa') }}" class="{{ 'active' if active_nav == 'mapa' else '' }}"><span class="nav-icon">🗺</span> Mapa epidemiológico</a></li>
+        <li><a href="{{ url_for('main.enfermedades') }}" class="{{ 'active' if active_nav == 'enfermedades' else '' }}"><span class="nav-icon">☉</span> Enfermedades</a></li>
+        <li class="nav-divider"></li>
+	{% if es_admin %}
+	<li><a href="{{ url_for('main.usuarios') }}" class="{{ 'active' if active_nav == 'usuarios' else '' }}"><span class="nav-icon">👤</span> Usuarios</a></li>
+        <li><a href="{{ url_for('main.auditoria') }}" class="{{ 'active' if active_nav == 'auditoria' else '' }}"><span class="nav-icon">≡</span> Auditoría</a></li>
+	{% endif %}
+      </ul>
+    </aside>
+
+    <div class="main">
+      <div class="topbar">
+        <span class="status-pill"><span class="status-dot"></span> Datos actualizados hace unos segundos</span>
+        <div class="icon-btn" title="Notificaciones">🔔</div>
+        <div class="avatar-menu" tabindex="0">
+          <div class="avatar-circle">{{ (current_user.full_name or current_user.username or '?')[:1]|upper }}</div>
+          <div class="avatar-dropdown">
+            <div class="user-name">{{ current_user.full_name }}</div>
+            <div class="user-roles">{{ current_user.roles|join(', ') }}</div>
+            <a href="{{ url_for('main.logout') }}">Cerrar sesión</a>
+          </div>
+        </div>
+      </div>
+      <div class="content">
+        {% block content %}{% endblock %}
+      </div>
+    </div>
+  </div>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

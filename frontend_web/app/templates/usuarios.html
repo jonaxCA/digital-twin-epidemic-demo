@@ -1,48 +1,112 @@
-{% extends "base.html" %}
-{% from "macros.html" import kpi, badge, filtros, tabla %}
-
-{% block titulo %}Gestión de usuarios{% endblock %}
-{% block encabezado %}Gestión de usuarios{% endblock %}
-{% block subtitulo %}Administra los accesos, roles y permisos de los usuarios del sistema.{% endblock %}
-
-{% block acciones %}
-  <a class="btn btn--claro" href="#">Exportar</a>
-  <a class="btn btn--primario" href="#">Nuevo usuario</a>
-{% endblock %}
-
-{% block contenido %}
-
-<div class="kpis">
-  {{ kpi('Total usuarios', total) }}
-  {{ kpi('Activos', activos, nota='con acceso vigente') }}
-  {{ kpi('Pendientes', pendientes, delta='Por activar', tendencia='alerta') }}
-  {{ kpi('Inactivos', inactivos, nota='baja lógica') }}
+{% extends "base_app.html" %}
+{% block title %}Gestión de usuarios{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Gestión de usuarios</h1>
+    <p class="subtitle">Administra los accesos, roles y permisos de los usuarios del sistema.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-primary" href="{{ url_for('main.usuario_nuevo') }}">+ Nuevo usuario</a>
+  </div>
 </div>
 
-{{ filtros([
-  {'tipo': 'busqueda', 'etiqueta': 'Buscar', 'placeholder': 'Buscar por nombre, correo o ID...'},
-  {'tipo': 'select', 'etiqueta': 'Rol', 'opciones': ['Todos'] + roles.values()|list},
-  {'tipo': 'select', 'etiqueta': 'Departamento', 'opciones': ['Todos', 'Vigilancia', 'Modelado', 'Campo', 'Sistemas']},
-  {'tipo': 'select', 'etiqueta': 'Estado', 'opciones': ['Todos', 'Activo', 'Pendiente', 'Inactivo']}
-]) }}
-
-{% call tabla('Usuarios del sistema',
-              ['ID', 'NOMBRE', 'CORREO', 'ROL', 'DEPARTAMENTO', 'ESTADO', 'ÚLTIMO ACCESO', ''],
-              total=total, mostrando=usuarios|length) %}
-  {% for u in usuarios %}
-  <tr>
-    <td class="suave">{{ u.id }}</td>
-    <td class="fuerte">{{ u.nombre }}</td>
-    <td class="suave">{{ u.correo }}</td>
-    <td>{{ roles.get(u.rol, u.rol) }}</td>
-    <td>{{ u.departamento }}</td>
-    <td>{{ badge(u.estado, punto=true) }}</td>
-    <td class="suave">{{ u.ultimo_acceso }}</td>
-    <td><button class="acciones-fila" type="button" aria-label="Acciones">⋮</button></td>
-  </tr>
-  {% else %}
-  <tr><td colspan="8"><div class="vacio">No hay usuarios que coincidan con el filtro.</div></td></tr>
+{% with mensajes = get_flashed_messages(with_categories=true) %}
+  {% for categoria, mensaje in mensajes %}
+  <div class="alert alert-{{ 'error' if categoria == 'error' else 'ok' }}">{{ mensaje }}</div>
   {% endfor %}
-{% endcall %}
+{% endwith %}
 
+<div class="stat-grid">
+  <div class="card stat-card">
+    <div class="stat-label"><span>TOTAL USUARIOS</span></div>
+    <div class="stat-value">{{ resumen.total }}</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-label"><span>ACTIVOS</span></div>
+    <div class="stat-value">{{ resumen.activos }}</div>
+    <div class="stat-trend"><span>con acceso vigente</span></div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-label"><span>PENDIENTES</span></div>
+    <div class="stat-value">{{ resumen.pendientes }}</div>
+    <div class="stat-trend"><span class="trend-badge trend-up">Por activar</span></div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-label"><span>INACTIVOS</span></div>
+    <div class="stat-value">{{ resumen.inactivos }}</div>
+    <div class="stat-trend"><span>baja lógica</span></div>
+  </div>
+</div>
+
+<form class="mapa-filtros" method="get">
+  <div class="field">
+    <label for="q">Buscar</label>
+    <input type="text" id="q" name="q" value="{{ filtro_q }}" placeholder="Nombre, correo o usuario...">
+  </div>
+  <div class="field">
+    <label for="rol">Rol</label>
+    <select id="rol" name="rol">
+      <option value="">Todos</option>
+      {% for r in roles %}
+      <option value="{{ r.id }}" {{ 'selected' if filtro_rol == r.id else '' }}>{{ r.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="estado">Estado</label>
+    <select id="estado" name="estado">
+      <option value="">Todos</option>
+      <option value="activo" {{ 'selected' if filtro_estado == 'activo' else '' }}>Activo</option>
+      <option value="pendiente" {{ 'selected' if filtro_estado == 'pendiente' else '' }}>Pendiente</option>
+      <option value="inactivo" {{ 'selected' if filtro_estado == 'inactivo' else '' }}>Inactivo</option>
+    </select>
+  </div>
+  <button type="submit" class="btn btn-primary">Filtrar</button>
+  <a href="{{ url_for('main.usuarios') }}" class="btn">Restablecer</a>
+</form>
+
+<div class="card">
+  <div class="card-header">
+    <div>
+      <h3>Usuarios del sistema</h3>
+      <p class="subtitle">Mostrando {{ usuarios|length }} de {{ resumen.total }}</p>
+    </div>
+  </div>
+  <table class="situacion-table">
+    <thead>
+      <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Último acceso</th><th>Acciones</th></tr>
+    </thead>
+    <tbody>
+      {% for u in usuarios %}
+      <tr>
+        <td class="fuerte">{{ u.nombre }}</td>
+        <td>{{ u.correo }}</td>
+        <td>{{ u.roles }}</td>
+        <td><span class="badge badge-{{ u.estado|lower }}">{{ u.estado }}</span></td>
+        <td>{{ u.ultimo_acceso }}</td>
+        <td class="col-acciones">
+          <a class="btn btn-mini" href="{{ url_for('main.usuario_editar', user_id=u.id) }}">Editar</a>
+
+          <form method="post" action="{{ url_for('main.usuario_estado', user_id=u.id) }}" class="inline-form">
+            <input type="hidden" name="activar" value="{{ '0' if u.estado != 'Inactivo' else '1' }}">
+            <button type="submit" class="btn btn-mini"
+                    {{ 'disabled title=No-puedes-desactivarte-a-ti-mismo' if u.id == current_user.sub and u.estado != 'Inactivo' else '' }}>
+              {{ 'Reactivar' if u.estado == 'Inactivo' else 'Desactivar' }}
+            </button>
+          </form>
+
+          <form method="post" action="{{ url_for('main.usuario_eliminar', user_id=u.id) }}" class="inline-form"
+                onsubmit="return confirm('¿Eliminar definitivamente a {{ u.nombre }}? Esta acción no se puede deshacer.');">
+            <button type="submit" class="btn btn-mini btn-peligro"
+                    {{ 'disabled' if u.id == current_user.sub else '' }}>Eliminar</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6"><div class="vacio">No hay usuarios que coincidan con el filtro.</div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% endblock %}

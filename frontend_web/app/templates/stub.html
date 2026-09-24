@@ -1,0 +1,9 @@
+{% extends "base_app.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block content %}
+<div class="stub-page">
+  <h2>{{ titulo }}</h2>
+  <p>Esta pantalla todavía no está disponible en esta versión del sistema.</p>
+  <p><a href="{{ url_for('main.dashboard') }}" style="color:var(--accent-blue);font-weight:600;">← Volver al dashboard</a></p>
+</div>
+{% endblock %}

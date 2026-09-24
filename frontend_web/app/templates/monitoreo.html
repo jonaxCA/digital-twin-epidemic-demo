@@ -1,96 +1,331 @@
-{% extends "base.html" %}
-{% from "macros.html" import badge, filtros, tabla %}
-
-{% block titulo %}Análisis epidemiológico{% endblock %}
-{% block encabezado %}Análisis epidemiológico{% endblock %}
-{% block subtitulo %}Explora la evolución de los indicadores por tiempo, ubicación y características demográficas.{% endblock %}
-
-{% block acciones %}
-  <a class="btn btn--claro" href="#">Compartir</a>
-  <a class="btn btn--claro" href="#">Exportar</a>
-{% endblock %}
-
-{% block contenido %}
-
-{{ filtros([
-  {'tipo': 'select', 'etiqueta': 'Enfermedad', 'opciones': enfermedades | map(attribute='nombre') | list},
-  {'tipo': 'select', 'etiqueta': 'Indicador', 'opciones': ['Incidencia', 'Casos confirmados', 'Hospitalizados', 'Defunciones']},
-  {'tipo': 'select', 'etiqueta': 'Municipio', 'opciones': ['Todos los municipios'] + zonas | map(attribute='nombre') | list},
-  {'tipo': 'select', 'etiqueta': 'Periodo', 'opciones': ['7 días', '30 días', '90 días']}
-]) }}
-
-<div class="notas">
-  {% for nota in datos.notas %}
-  <div class="nota nota--{{ nota.tipo }}">
-    <div class="nota__titulo">{{ nota.titulo }}</div>
-    <div class="nota__texto">{{ nota.texto }}</div>
+{% extends "base_app.html" %}
+{% block title %}Monitoreo{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Análisis epidemiológico</h1>
+    <p class="subtitle">Explora la evolución de los indicadores epidemiológicos por tiempo, ubicación y características demográficas.</p>
   </div>
-  {% endfor %}
+  <div class="page-actions">
+    <button type="button" class="btn" id="btn-compartir"
+            title="Copia el enlace de esta vista con sus filtros">⇗ Compartir</button>
+    <a class="btn btn-primary" href="{{ url_for('main.export_monitoreo_csv', **filtros_url) }}">⬇ Exportar</a>
+  </div>
 </div>
 
-<section class="tarjeta" style="margin-bottom:22px">
-  <div class="tarjeta__cabecera">
-    <h2>Evolución temporal de casos e incidencia</h2>
-    <div class="segmentos">
-      <button class="segmento segmento--activo" type="button" data-tipo="line">Línea</button>
-      <button class="segmento" type="button" data-tipo="column">Columna</button>
-      <button class="segmento" type="button" data-tipo="area">Área</button>
+<form class="card monitoreo-filtros" method="get" action="{{ url_for('main.monitoreo') }}">
+  <div class="field">
+    <label for="enfermedad">Enfermedad</label>
+    <select name="enfermedad" id="enfermedad">
+      <option value="">Todas</option>
+      {% for e in enfermedades %}
+      <option value="{{ e.id }}" {{ 'selected' if filtros.disease_id == e.id else '' }}>{{ e.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="indicador">Indicador</label>
+    <select name="indicador" id="indicador">
+      {% for clave, etiqueta in indicadores.items() %}
+      <option value="{{ clave }}" {{ 'selected' if filtros.indicador == clave else '' }}>{{ etiqueta }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="municipio">Filtro geográfico (municipio)</label>
+    <select name="municipio" id="municipio">
+      <option value="">Todos los municipios</option>
+      {% for m in municipios %}
+      <option value="{{ m.id }}" {{ 'selected' if filtros.region_id == m.id else '' }}>{{ m.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <span class="field-label">Periodo</span>
+    <div class="segmented">
+      {% for p in periodos %}
+      <label class="{{ 'activo' if filtros.dias == p else '' }}">
+        <input type="radio" name="dias" value="{{ p }}" {{ 'checked' if filtros.dias == p else '' }} />{{ p }}d
+      </label>
+      {% endfor %}
     </div>
   </div>
-  <div class="tarjeta__cuerpo">
-    <div id="grafica-evolucion" class="grafica grafica--alta"></div>
+  <div class="filtro-acciones">
+    <button type="submit" class="btn btn-primary">Aplicar</button>
+    <a class="btn" href="{{ url_for('main.monitoreo') }}">Reset</a>
   </div>
-</section>
+  {% if filtros.busqueda %}<input type="hidden" name="q" value="{{ filtros.busqueda }}" />{% endif %}
+</form>
 
-<div class="rejilla-mitades">
-  <section class="tarjeta">
-    <div class="tarjeta__cabecera"><h2>Distribución por grupo etario</h2></div>
-    <div class="tarjeta__cuerpo"><div id="grafica-edad" class="grafica grafica--baja"></div></div>
-  </section>
-
-  <section class="tarjeta">
-    <div class="tarjeta__cabecera"><h2>Distribución por sexo</h2></div>
-    <div class="tarjeta__cuerpo"><div id="grafica-sexo" class="grafica grafica--baja"></div></div>
-  </section>
+<div class="insight-grid">
+  <div class="card insight-card">
+    <div class="insight-icon azul">◈</div>
+    <div>
+      <h3>Tendencia geográfica</h3>
+      <p>{{ insights.geografica }}</p>
+    </div>
+  </div>
+  <div class="card insight-card">
+    <div class="insight-icon verde">◉</div>
+    <div>
+      <h3>Incidencia global</h3>
+      <p>{{ insights.global }}</p>
+    </div>
+  </div>
+  <div class="card insight-card">
+    <div class="insight-icon rojo">◆</div>
+    <div>
+      <h3>Población crítica</h3>
+      <p>{{ insights.critica }}</p>
+    </div>
+  </div>
 </div>
 
-{% call tabla('Detalle por zona geográfica',
-              ['ZONA', 'MUNICIPIO', 'CASOS', 'INCIDENCIA / 100K', 'VARIACIÓN (7D)', 'HOSPITALIZADOS', 'ESTADO'],
-              total=24, mostrando=zonas|length) %}
-  {% for z in zonas %}
-  <tr>
-    <td class="fuerte">{{ z.zona }}</td>
-    <td class="suave">{{ z.nombre }}</td>
-    <td class="num">{{ '{:,}'.format(z.casos) }}</td>
-    <td class="num">{{ z.incidencia }}</td>
-    <td class="num {{ 'sube' if z.variacion > 0 else 'baja' }}">
-      {{ '+' if z.variacion > 0 }}{{ z.variacion }}%
-    </td>
-    <td class="num">{{ z.hospitalizados }}</td>
-    <td>{{ badge(z.estado) }}</td>
-  </tr>
-  {% endfor %}
-{% endcall %}
+<div class="card">
+  <div class="card-header">
+    <div>
+      <h3>Evolución temporal de casos e incidencia</h3>
+      <p class="subtitle">
+        {{ totales.casos|int }} casos en los últimos {{ filtros.dias }} días ·
+        incidencia {{ totales.incidencia }} /100k ·
+        <span class="{{ 'texto-sube' if totales.casos_pct >= 0 else 'texto-baja' }}">
+          {{ '+' if totales.casos_pct >= 0 else '' }}{{ totales.casos_pct }}%
+        </span> vs periodo anterior
+      </p>
+    </div>
+    <div class="chart-toggle" id="chart-toggle">
+      <button type="button" data-tipo="line">Línea</button>
+      <button type="button" data-tipo="column" class="activo">Columna</button>
+      <button type="button" data-tipo="area">Área</button>
+    </div>
+  </div>
+  <div class="chart-wrap"><div id="chart-evolucion" style="height:340px;"></div></div>
+</div>
 
+<div class="grid-2col">
+  <div class="card">
+    <div class="card-header"><div><h3>Distribución por grupo etario</h3></div></div>
+    <div class="chart-wrap"><div id="chart-edad" style="height:280px;"></div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div><h3>Distribución por sexo</h3></div></div>
+    <div class="chart-wrap"><div id="chart-sexo" style="height:280px;"></div></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div>
+      <h3>Detalle por zona geográfica</h3>
+      <p class="subtitle">Municipios de Nuevo León · ordenado por {{ indicadores[filtros.indicador]|lower }} · variación siempre a 7 días</p>
+    </div>
+    <form class="buscar-zona" method="get" action="{{ url_for('main.monitoreo') }}">
+      {% for k, v in filtros_url.items() %}{% if k != 'q' %}<input type="hidden" name="{{ k }}" value="{{ v }}" />{% endif %}{% endfor %}
+      <input type="search" name="q" value="{{ filtros.busqueda }}" placeholder="Buscar zona..." />
+      <button type="submit" class="btn">Buscar</button>
+    </form>
+  </div>
+
+  <div class="tabla-scroll">
+    <table class="situacion-table catalogo-table">
+      <thead>
+        <tr>
+          <th>Zona</th>
+          <th>Casos</th>
+          <th>Incidencia / 100k</th>
+          <th>Variación (7d)</th>
+          <th>Graves</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for z in zonas.zonas %}
+        <tr>
+          <td class="celda-nombre">{{ z.zona }}</td>
+          <td>{{ "{:,}".format(z.casos) }}</td>
+          <td>{{ z.incidencia }}</td>
+          <td class="{{ 'texto-sube' if z.variacion >= 0 else 'texto-baja' }}">
+            {{ '▲' if z.variacion >= 0 else '▼' }} {{ '+' if z.variacion >= 0 else '' }}{{ z.variacion }}%
+          </td>
+          <td>{{ z.graves }}</td>
+          <td><span class="badge badge-{{ z.estado|lower }}">{{ z.estado }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="tabla-vacia">Ninguna zona coincide con los filtros aplicados.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tabla-footer">
+    <span class="tabla-conteo">
+      {% if zonas.total %}Mostrando {{ zonas.desde }} a {{ zonas.hasta }} de {{ zonas.total }} zonas{% else %}Sin resultados{% endif %}
+    </span>
+    {% if zonas.paginas > 1 %}
+    <div class="paginador">
+      {% if zonas.pagina > 1 %}
+      <a class="pag-btn" href="{{ url_for('main.monitoreo', pagina=zonas.pagina - 1, **filtros_url) }}">‹</a>
+      {% endif %}
+      {% for p in range(1, zonas.paginas + 1) %}
+      <a class="pag-btn {{ 'activa' if p == zonas.pagina else '' }}"
+         href="{{ url_for('main.monitoreo', pagina=p, **filtros_url) }}">{{ p }}</a>
+      {% endfor %}
+      {% if zonas.pagina < zonas.paginas %}
+      <a class="pag-btn" href="{{ url_for('main.monitoreo', pagina=zonas.pagina + 1, **filtros_url) }}">›</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
 {% endblock %}
 
-{% block scripts %}
+{% block extra_scripts %}
 <script src="https://code.highcharts.com/highcharts.js"></script>
-<script src="{{ url_for('static', filename='js/graficas.js') }}"></script>
 <script>
-  const datosMonitoreo = {{ datos | tojson }};
-  evolucionTemporal('grafica-evolucion', datosMonitoreo);
-  distribucionEtaria('grafica-edad', datosMonitoreo.grupo_etario);
-  distribucionSexo('grafica-sexo', datosMonitoreo.sexo);
+  const SERIE = {{ serie|tojson }};
+  const EDADES = {{ edades|tojson }};
+  const SEXOS = {{ sexos|tojson }};
 
-  document.querySelectorAll('.segmento').forEach(function (boton) {
-    boton.addEventListener('click', function () {
-      document.querySelectorAll('.segmento').forEach(function (b) {
-        b.classList.remove('segmento--activo');
-      });
-      boton.classList.add('segmento--activo');
-      evolucionTemporal('grafica-evolucion', datosMonitoreo, boton.dataset.tipo);
+  const COLOR_CASOS = '#1b6ce3';
+  const COLOR_INCID = '#065f46';
+  // Muestreados del export de Figma de esta pantalla.
+  const COLOR_SEXO = ['#0058be', '#091426', '#c5c6cd'];
+
+  const fechas = SERIE.map(p => p.fecha.slice(5).replace('-', '/'));
+  let chartEvolucion = null;
+
+  // El toggle solo cambia la serie de casos diarios. La incidencia acumulada
+  // se queda siempre como linea: es una curva monotona y dibujarla en columnas
+  // se lee como si fueran casos, que es justo lo que hay que evitar en un
+  // grafico de doble eje.
+  function dibujarEvolucion(tipo) {
+    if (chartEvolucion) chartEvolucion.destroy();
+    chartEvolucion = Highcharts.chart('chart-evolucion', {
+      chart: { backgroundColor: 'transparent', zoomType: 'x' },
+      title: { text: null },
+      credits: { enabled: false },
+      xAxis: { categories: fechas, tickInterval: Math.ceil(fechas.length / 12) || 1,
+               labels: { style: { fontSize: '10px' } } },
+      yAxis: [
+        { title: { text: 'Casos confirmados', style: { fontSize: '11px' } },
+          labels: { style: { fontSize: '10px' } } },
+        { title: { text: 'Incidencia / 100k', style: { fontSize: '11px' } },
+          labels: { style: { fontSize: '10px' } }, opposite: true }
+      ],
+      tooltip: { shared: true },
+      legend: { align: 'left', verticalAlign: 'top', itemStyle: { fontSize: '11px' } },
+      plotOptions: { area: { fillOpacity: 0.25 }, series: { marker: { enabled: false } } },
+      series: [
+        {
+          name: 'Casos diarios', yAxis: 0, color: COLOR_CASOS, type: tipo,
+          data: SERIE.map(p => p.casos)
+        },
+        {
+          name: 'Incidencia acumulada', yAxis: 1, color: COLOR_INCID, type: 'line',
+          data: SERIE.map(p => p.incidencia_acum)
+        }
+      ]
     });
+  }
+
+  dibujarEvolucion('column');
+
+  document.getElementById('chart-toggle').addEventListener('click', function (ev) {
+    const btn = ev.target.closest('button[data-tipo]');
+    if (!btn) return;
+    this.querySelectorAll('button').forEach(b => b.classList.remove('activo'));
+    btn.classList.add('activo');
+    dibujarEvolucion(btn.dataset.tipo);
   });
+
+  Highcharts.chart('chart-edad', {
+    chart: { type: 'bar', backgroundColor: 'transparent' },
+    title: { text: null }, credits: { enabled: false }, legend: { enabled: false },
+    xAxis: { categories: EDADES.map(e => e.grupo + ' años'), labels: { style: { fontSize: '11px' } } },
+    yAxis: { title: { text: 'Número de casos', style: { fontSize: '11px' } },
+             labels: { style: { fontSize: '10px' } } },
+    plotOptions: { bar: { borderRadius: 3, dataLabels: { enabled: true, style: { fontSize: '10px' } } } },
+    series: [{ name: 'Casos', color: COLOR_CASOS, data: EDADES.map(e => e.casos) }]
+  });
+
+  Highcharts.chart('chart-sexo', {
+    chart: { type: 'pie', backgroundColor: 'transparent' },
+    title: { text: null }, credits: { enabled: false },
+    tooltip: { pointFormat: '<b>{point.y}</b> casos ({point.percentage:.1f}%)' },
+    plotOptions: {
+      pie: {
+        innerSize: '58%', borderWidth: 2,
+        dataLabels: { enabled: true, format: '{point.name}: {point.percentage:.1f}%',
+                      style: { fontSize: '11px', fontWeight: '500' } }
+      }
+    },
+    series: [{
+      name: 'Casos',
+      data: SEXOS.map((s, i) => ({ name: s.label, y: s.casos, color: COLOR_SEXO[i % COLOR_SEXO.length] }))
+    }]
+  });
+
+  // ---------------------------------------------------------------- compartir
+  // "Compartir vista" = copiar el enlace de esta pantalla con sus filtros. No
+  // hace falta guardar nada en la base: los filtros ya viajan en el query
+  // string, asi que la URL ES la vista.
+  (function () {
+    const boton = document.getElementById('btn-compartir');
+    const formulario = document.querySelector('.monitoreo-filtros');
+    const TEXTO_ORIGINAL = boton.textContent;
+
+    // Se arma desde el formulario y no desde window.location: asi se comparte
+    // lo que esta seleccionado en pantalla, aunque todavia no se haya dado
+    // Aplicar. Si no, se compartiria la vista anterior.
+    function urlCompartible() {
+      const params = new URLSearchParams();
+      new FormData(formulario).forEach(function (valor, clave) {
+        if (valor !== '') params.set(clave, valor);
+      });
+      const qs = params.toString();
+      return window.location.origin + window.location.pathname + (qs ? '?' + qs : '');
+    }
+
+    // navigator.clipboard solo existe en contexto seguro (https o localhost).
+    // Servido por IP en la red local no esta, de ahi el respaldo.
+    function copiarRespaldo(texto) {
+      const tmp = document.createElement('textarea');
+      tmp.value = texto;
+      tmp.setAttribute('readonly', '');
+      tmp.style.position = 'fixed';
+      tmp.style.opacity = '0';
+      document.body.appendChild(tmp);
+      tmp.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(tmp);
+      return ok;
+    }
+
+    function avisar(texto) {
+      boton.textContent = texto;
+      boton.disabled = true;
+      setTimeout(function () {
+        boton.textContent = TEXTO_ORIGINAL;
+        boton.disabled = false;
+      }, 2000);
+    }
+
+    boton.addEventListener('click', function () {
+      const url = urlCompartible();
+      const listo = function (ok) {
+        if (ok) { avisar('✓ Enlace copiado'); }
+        else { window.prompt('Copia el enlace de esta vista:', url); }
+      };
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(url).then(
+          function () { listo(true); },
+          function () { listo(copiarRespaldo(url)); }
+        );
+      } else {
+        listo(copiarRespaldo(url));
+      }
+    });
+  })();
 </script>
 {% endblock %}
