@@ -7,7 +7,7 @@
     <p class="subtitle">Administra los accesos, roles y permisos de los usuarios del sistema.</p>
   </div>
   <div class="page-actions">
-    <a class="btn btn-primary" href="{{ url_for('usuario_nuevo') }}">+ Nuevo usuario</a>
+    <a class="btn btn-primary" href="{{ url_for('main.usuario_nuevo') }}">+ Nuevo usuario</a>
   </div>
 </div>
 
@@ -63,7 +63,7 @@
     </select>
   </div>
   <button type="submit" class="btn btn-primary">Filtrar</button>
-  <a href="{{ url_for('usuarios') }}" class="btn">Restablecer</a>
+  <a href="{{ url_for('main.usuarios') }}" class="btn">Restablecer</a>
 </form>
 
 <div class="card">
@@ -86,9 +86,9 @@
         <td><span class="badge badge-{{ u.estado|lower }}">{{ u.estado }}</span></td>
         <td>{{ u.ultimo_acceso }}</td>
         <td class="col-acciones">
-          <a class="btn btn-mini" href="{{ url_for('usuario_editar', user_id=u.id) }}">Editar</a>
+          <a class="btn btn-mini" href="{{ url_for('main.usuario_editar', user_id=u.id) }}">Editar</a>
 
-          <form method="post" action="{{ url_for('usuario_estado', user_id=u.id) }}" class="inline-form">
+          <form method="post" action="{{ url_for('main.usuario_estado', user_id=u.id) }}" class="inline-form">
             <input type="hidden" name="activar" value="{{ '0' if u.estado != 'Inactivo' else '1' }}">
             <button type="submit" class="btn btn-mini"
                     {{ 'disabled title=No-puedes-desactivarte-a-ti-mismo' if u.id == current_user.sub and u.estado != 'Inactivo' else '' }}>
@@ -96,7 +96,7 @@
             </button>
           </form>
 
-          <form method="post" action="{{ url_for('usuario_eliminar', user_id=u.id) }}" class="inline-form"
+          <form method="post" action="{{ url_for('main.usuario_eliminar', user_id=u.id) }}" class="inline-form"
                 onsubmit="return confirm('¿Eliminar definitivamente a {{ u.nombre }}? Esta acción no se puede deshacer.');">
             <button type="submit" class="btn btn-mini btn-peligro"
                     {{ 'disabled' if u.id == current_user.sub else '' }}>Eliminar</button>

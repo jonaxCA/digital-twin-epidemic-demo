@@ -11,7 +11,7 @@ import json
 
 from flask import request
 
-from db import execute
+from .db import execute
 
 
 def log_audit(user_id, action, entity_type, entity_id=None,

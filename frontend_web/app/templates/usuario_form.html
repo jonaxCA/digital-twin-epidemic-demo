@@ -84,7 +84,7 @@
       <button type="submit" class="btn btn-primary">
         {{ "Guardar cambios" if usuario and usuario.id else "Crear usuario" }}
       </button>
-      <a href="{{ url_for('usuarios') }}" class="btn">Cancelar</a>
+      <a href="{{ url_for('main.usuarios') }}" class="btn">Cancelar</a>
     </div>
   </form>
 </div>

@@ -380,7 +380,7 @@
 
   function cargarYDibujar(dias, enfermedad) {
     const geoUrl = '{{ url_for("static", filename="js/nl_municipios.json") }}';
-    const apiUrl = new URL('{{ url_for("api_mapa") }}', window.location.origin);
+    const apiUrl = new URL('{{ url_for("main.api_mapa") }}', window.location.origin);
     apiUrl.searchParams.set('dias', dias);
     if (enfermedad) apiUrl.searchParams.set('enfermedad', enfermedad);
 

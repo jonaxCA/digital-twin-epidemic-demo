@@ -9,11 +9,11 @@
   <div class="page-actions">
     <button type="button" class="btn" id="btn-compartir"
             title="Copia el enlace de esta vista con sus filtros">⇗ Compartir</button>
-    <a class="btn btn-primary" href="{{ url_for('export_monitoreo_csv', **filtros_url) }}">⬇ Exportar</a>
+    <a class="btn btn-primary" href="{{ url_for('main.export_monitoreo_csv', **filtros_url) }}">⬇ Exportar</a>
   </div>
 </div>
 
-<form class="card monitoreo-filtros" method="get" action="{{ url_for('monitoreo') }}">
+<form class="card monitoreo-filtros" method="get" action="{{ url_for('main.monitoreo') }}">
   <div class="field">
     <label for="enfermedad">Enfermedad</label>
     <select name="enfermedad" id="enfermedad">
@@ -52,7 +52,7 @@
   </div>
   <div class="filtro-acciones">
     <button type="submit" class="btn btn-primary">Aplicar</button>
-    <a class="btn" href="{{ url_for('monitoreo') }}">Reset</a>
+    <a class="btn" href="{{ url_for('main.monitoreo') }}">Reset</a>
   </div>
   {% if filtros.busqueda %}<input type="hidden" name="q" value="{{ filtros.busqueda }}" />{% endif %}
 </form>
@@ -119,7 +119,7 @@
       <h3>Detalle por zona geográfica</h3>
       <p class="subtitle">Municipios de Nuevo León · ordenado por {{ indicadores[filtros.indicador]|lower }} · variación siempre a 7 días</p>
     </div>
-    <form class="buscar-zona" method="get" action="{{ url_for('monitoreo') }}">
+    <form class="buscar-zona" method="get" action="{{ url_for('main.monitoreo') }}">
       {% for k, v in filtros_url.items() %}{% if k != 'q' %}<input type="hidden" name="{{ k }}" value="{{ v }}" />{% endif %}{% endfor %}
       <input type="search" name="q" value="{{ filtros.busqueda }}" placeholder="Buscar zona..." />
       <button type="submit" class="btn">Buscar</button>
@@ -164,14 +164,14 @@
     {% if zonas.paginas > 1 %}
     <div class="paginador">
       {% if zonas.pagina > 1 %}
-      <a class="pag-btn" href="{{ url_for('monitoreo', pagina=zonas.pagina - 1, **filtros_url) }}">‹</a>
+      <a class="pag-btn" href="{{ url_for('main.monitoreo', pagina=zonas.pagina - 1, **filtros_url) }}">‹</a>
       {% endif %}
       {% for p in range(1, zonas.paginas + 1) %}
       <a class="pag-btn {{ 'activa' if p == zonas.pagina else '' }}"
-         href="{{ url_for('monitoreo', pagina=p, **filtros_url) }}">{{ p }}</a>
+         href="{{ url_for('main.monitoreo', pagina=p, **filtros_url) }}">{{ p }}</a>
       {% endfor %}
       {% if zonas.pagina < zonas.paginas %}
-      <a class="pag-btn" href="{{ url_for('monitoreo', pagina=zonas.pagina + 1, **filtros_url) }}">›</a>
+      <a class="pag-btn" href="{{ url_for('main.monitoreo', pagina=zonas.pagina + 1, **filtros_url) }}">›</a>
       {% endif %}
     </div>
     {% endif %}

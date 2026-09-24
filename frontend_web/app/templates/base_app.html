@@ -19,14 +19,14 @@
         </div>
       </div>
       <ul class="sidebar-nav">
-        <li><a href="{{ url_for('dashboard') }}" class="{{ 'active' if active_nav == 'dashboard' else '' }}"><span class="nav-icon">▦</span> Dashboard</a></li>
-        <li><a href="{{ url_for('monitoreo') }}" class="{{ 'active' if active_nav == 'monitoreo' else '' }}"><span class="nav-icon">📈</span> Monitoreo</a></li>
-        <li><a href="{{ url_for('mapa') }}" class="{{ 'active' if active_nav == 'mapa' else '' }}"><span class="nav-icon">🗺</span> Mapa epidemiológico</a></li>
-        <li><a href="{{ url_for('enfermedades') }}" class="{{ 'active' if active_nav == 'enfermedades' else '' }}"><span class="nav-icon">☉</span> Enfermedades</a></li>
+        <li><a href="{{ url_for('main.dashboard') }}" class="{{ 'active' if active_nav == 'dashboard' else '' }}"><span class="nav-icon">▦</span> Dashboard</a></li>
+        <li><a href="{{ url_for('main.monitoreo') }}" class="{{ 'active' if active_nav == 'monitoreo' else '' }}"><span class="nav-icon">📈</span> Monitoreo</a></li>
+        <li><a href="{{ url_for('main.mapa') }}" class="{{ 'active' if active_nav == 'mapa' else '' }}"><span class="nav-icon">🗺</span> Mapa epidemiológico</a></li>
+        <li><a href="{{ url_for('main.enfermedades') }}" class="{{ 'active' if active_nav == 'enfermedades' else '' }}"><span class="nav-icon">☉</span> Enfermedades</a></li>
         <li class="nav-divider"></li>
 	{% if es_admin %}
-	<li><a href="{{ url_for('usuarios') }}" class="{{ 'active' if active_nav == 'usuarios' else '' }}"><span class="nav-icon">👤</span> Usuarios</a></li>
-        <li><a href="{{ url_for('auditoria') }}" class="{{ 'active' if active_nav == 'auditoria' else '' }}"><span class="nav-icon">≡</span> Auditoría</a></li>
+	<li><a href="{{ url_for('main.usuarios') }}" class="{{ 'active' if active_nav == 'usuarios' else '' }}"><span class="nav-icon">👤</span> Usuarios</a></li>
+        <li><a href="{{ url_for('main.auditoria') }}" class="{{ 'active' if active_nav == 'auditoria' else '' }}"><span class="nav-icon">≡</span> Auditoría</a></li>
 	{% endif %}
       </ul>
     </aside>
@@ -40,7 +40,7 @@
           <div class="avatar-dropdown">
             <div class="user-name">{{ current_user.full_name }}</div>
             <div class="user-roles">{{ current_user.roles|join(', ') }}</div>
-            <a href="{{ url_for('logout') }}">Cerrar sesión</a>
+            <a href="{{ url_for('main.logout') }}">Cerrar sesión</a>
           </div>
         </div>
       </div>

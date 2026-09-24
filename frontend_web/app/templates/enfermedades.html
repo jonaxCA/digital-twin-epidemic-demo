@@ -7,8 +7,8 @@
     <p class="subtitle">Administra las enfermedades disponibles para el monitoreo epidemiológico y las simulaciones.</p>
   </div>
   <div class="page-actions">
-    <a class="btn" href="{{ url_for('export_enfermedades_csv', **filtros_url) }}">⬇ Exportar</a>
-    <a class="btn btn-primary" href="{{ url_for('enfermedad_nueva') }}">+ Nueva enfermedad</a>
+    <a class="btn" href="{{ url_for('main.export_enfermedades_csv', **filtros_url) }}">⬇ Exportar</a>
+    <a class="btn btn-primary" href="{{ url_for('main.enfermedad_nueva') }}">+ Nueva enfermedad</a>
   </div>
 </div>
 
@@ -50,7 +50,7 @@
   </div>
 </div>
 
-<form class="card filtros-card" method="get" action="{{ url_for('enfermedades') }}">
+<form class="card filtros-card" method="get" action="{{ url_for('main.enfermedades') }}">
   <div class="field">
     <label for="q">Búsqueda</label>
     <input type="search" name="q" id="q" value="{{ filtros.busqueda }}"
@@ -65,7 +65,7 @@
     </select>
   </div>
   <div class="filtro-acciones">
-    <a class="btn" href="{{ url_for('enfermedades') }}">Limpiar</a>
+    <a class="btn" href="{{ url_for('main.enfermedades') }}">Limpiar</a>
     <button type="submit" class="btn btn-primary">Aplicar</button>
   </div>
 </form>
@@ -121,9 +121,9 @@
             <button type="button" class="btn-detalle" aria-expanded="false"
                     aria-controls="detalle-{{ e.id }}" title="Ver ficha">👁</button>
             {% if puede_editar_catalogo %}
-            <a class="btn-detalle" href="{{ url_for('enfermedad_editar', disease_id=e.id) }}"
+            <a class="btn-detalle" href="{{ url_for('main.enfermedad_editar', disease_id=e.id) }}"
                title="Editar ficha y parámetros">✎</a>
-            <form method="post" action="{{ url_for('enfermedad_estado', disease_id=e.id) }}"
+            <form method="post" action="{{ url_for('main.enfermedad_estado', disease_id=e.id) }}"
                   class="form-inline">
               <input type="hidden" name="activa" value="{{ '0' if e.activa else '1' }}">
               <button type="submit" class="btn-detalle"
@@ -209,14 +209,14 @@
     {% if listado.paginas > 1 %}
     <div class="paginador">
       {% if listado.pagina > 1 %}
-      <a class="pag-btn" href="{{ url_for('enfermedades', pagina=listado.pagina - 1, **filtros_url) }}">‹</a>
+      <a class="pag-btn" href="{{ url_for('main.enfermedades', pagina=listado.pagina - 1, **filtros_url) }}">‹</a>
       {% endif %}
       {% for p in range(1, listado.paginas + 1) %}
       <a class="pag-btn {{ 'activa' if p == listado.pagina else '' }}"
-         href="{{ url_for('enfermedades', pagina=p, **filtros_url) }}">{{ p }}</a>
+         href="{{ url_for('main.enfermedades', pagina=p, **filtros_url) }}">{{ p }}</a>
       {% endfor %}
       {% if listado.pagina < listado.paginas %}
-      <a class="pag-btn" href="{{ url_for('enfermedades', pagina=listado.pagina + 1, **filtros_url) }}">›</a>
+      <a class="pag-btn" href="{{ url_for('main.enfermedades', pagina=listado.pagina + 1, **filtros_url) }}">›</a>
       {% endif %}
     </div>
     {% endif %}

@@ -19,23 +19,18 @@ Alcance de esta version:
 """
 import csv
 import io
-import os
 from datetime import date, datetime, timezone
 
-from flask import (Flask, render_template, request, redirect, url_for,
+from flask import (Blueprint, render_template, request, redirect, url_for,
                    make_response, g, flash)
 
-import bcrypt
+from backend_web import queries
+from backend_web.audit import log_audit
+from backend_web.auth import attempt_login, create_token, hash_password
+from .permisos import (login_required, admin_required, roles_required, tiene_rol,
+                       get_current_user, COOKIE_NAME)
 
-import queries
-from audit import log_audit
-from auth import (attempt_login, create_token, login_required, admin_required,
-                  roles_required, tiene_rol, get_current_user, COOKIE_NAME)
-
-app = Flask(__name__)
-# flash() necesita firmar la cookie de sesion. Se reutiliza el mismo secreto
-# del JWT para no introducir otra variable de entorno.
-app.secret_key = os.environ.get("JWT_SECRET_KEY", "dev-secret-cambiar-en-despliegue")
+bp = Blueprint("main", __name__)
 
 STUB_ITEMS = {
     "simulaciones": "Simulaciones",
@@ -47,7 +42,7 @@ STUB_ITEMS = {
 EXPORT_MAX_FILAS = 1000
 
 
-@app.context_processor
+@bp.app_context_processor
 def inject_globals():
     user = get_current_user()
     return {
@@ -64,10 +59,10 @@ def inject_globals():
 # ---------------------------------------------------------------------------
 # 1. Dashboard publico -- sin login
 # ---------------------------------------------------------------------------
-@app.route("/")
+@bp.route("/")
 def dashboard_publico():
     if get_current_user():
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("main.dashboard"))
     indicadores = queries.get_resumen_indicadores()
     situacion = queries.get_resumen_situacion()
     curva = queries.get_curva_epidemica(30)
@@ -76,18 +71,18 @@ def dashboard_publico():
         indicadores=indicadores,
         situacion=situacion,
         curva=curva,
-        report_link=url_for("login"),
+        report_link=url_for("main.login"),
     )
 
 
 # ---------------------------------------------------------------------------
 # 2. Login
 # ---------------------------------------------------------------------------
-@app.route("/login", methods=["GET", "POST"])
+@bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
         if get_current_user():
-            return redirect(url_for("dashboard"))
+            return redirect(url_for("main.dashboard"))
         return render_template("login.html", error=None, usuario="")
 
     usuario = (request.form.get("usuario") or "").strip()
@@ -99,7 +94,7 @@ def login():
 
     log_audit(user["id"], "LOGIN", "users", entity_id=str(user["id"]))
     token = create_token(user)
-    next_url = request.args.get("next") or url_for("dashboard")
+    next_url = request.args.get("next") or url_for("main.dashboard")
     resp = make_response(redirect(next_url))
     resp.set_cookie(
         COOKIE_NAME, token, httponly=True, samesite="Lax", max_age=60 * 60 * 8
@@ -107,12 +102,12 @@ def login():
     return resp
 
 
-@app.route("/logout")
+@bp.route("/logout")
 def logout():
     user = get_current_user()
     if user:
         log_audit(user["sub"], "LOGOUT", "users", entity_id=str(user["sub"]))
-    resp = make_response(redirect(url_for("dashboard_publico")))
+    resp = make_response(redirect(url_for("main.dashboard_publico")))
     resp.delete_cookie(COOKIE_NAME)
     return resp
 
@@ -120,7 +115,7 @@ def logout():
 # ---------------------------------------------------------------------------
 # 3. Dashboard autenticado
 # ---------------------------------------------------------------------------
-@app.route("/dashboard")
+@bp.route("/dashboard")
 @login_required
 def dashboard():
     indicadores = queries.get_resumen_indicadores()
@@ -132,14 +127,14 @@ def dashboard():
         situacion=situacion,
         curva=curva,
         active_nav="dashboard",
-        report_link=url_for("export_resumen_csv"),
+        report_link=url_for("main.export_resumen_csv"),
     )
 
 
 # ---------------------------------------------------------------------------
 # 4. Mapa epidemiologico -- Nuevo Leon
 # ---------------------------------------------------------------------------
-@app.route("/mapa")
+@bp.route("/mapa")
 @login_required
 def mapa():
     dias = request.args.get("dias", default=30, type=int)
@@ -162,7 +157,7 @@ def mapa():
     )
 
 
-@app.route("/api/mapa")
+@bp.route("/api/mapa")
 @login_required
 def api_mapa():
     dias = request.args.get("dias", default=30, type=int)
@@ -178,7 +173,7 @@ def api_mapa():
     return {"municipios": municipios, "serie": serie}
 
 
-@app.route("/reportes/nuevo", methods=["GET", "POST"])
+@bp.route("/reportes/nuevo", methods=["GET", "POST"])
 @login_required
 def reporte_nuevo():
     """Captura de un caso epidemiologico -- el "+ Nuevo Reporte" del dashboard.
@@ -221,7 +216,7 @@ def reporte_nuevo():
               data_after=dict(caso))
     flash(f"Reporte #{nuevo_id} capturado: {caso['enfermedad']} en "
           f"{caso['municipio']}, {caso['report_date']}. Queda pendiente de validación.", "ok")
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("main.dashboard"))
 
 
 # ---------------------------------------------------------------------------
@@ -249,7 +244,7 @@ def _filtros_url(filtros):
     return {nombres[k]: v for k, v in filtros.items() if v}
 
 
-@app.route("/enfermedades")
+@bp.route("/enfermedades")
 @login_required
 def enfermedades():
     filtros = _filtros_enfermedades(request.args)
@@ -264,7 +259,7 @@ def enfermedades():
     )
 
 
-@app.route("/enfermedades/nueva", methods=["GET", "POST"])
+@bp.route("/enfermedades/nueva", methods=["GET", "POST"])
 @login_required
 def enfermedad_nueva():
     """Alta en el catalogo de enfermedades.
@@ -307,7 +302,7 @@ def enfermedad_nueva():
     log_audit(g.user["sub"], "CREATE", "diseases", entity_id=str(nuevo_id),
               data_after=_snapshot_enfermedad(queries.get_enfermedad(nuevo_id)))
     flash(f"Enfermedad «{datos['name']}» registrada con el código {datos['code']}.", "ok")
-    return redirect(url_for("enfermedades"))
+    return redirect(url_for("main.enfermedades"))
 
 
 def _snapshot_enfermedad(e):
@@ -320,7 +315,7 @@ def _snapshot_enfermedad(e):
             "default_params": e["default_params"]}
 
 
-@app.route("/enfermedades/<int:disease_id>/editar", methods=["GET", "POST"])
+@bp.route("/enfermedades/<int:disease_id>/editar", methods=["GET", "POST"])
 @roles_required("EPIDEMIOLOGO", "ADMINISTRADOR")
 def enfermedad_editar(disease_id):
     """Edicion del catalogo, incluidos los parametros que consume el motor.
@@ -336,7 +331,7 @@ def enfermedad_editar(disease_id):
     actual = queries.get_enfermedad(disease_id)
     if not actual:
         flash("Esa enfermedad ya no existe en el catálogo.", "error")
-        return redirect(url_for("enfermedades"))
+        return redirect(url_for("main.enfermedades"))
 
     if request.method == "GET":
         return render_template("enfermedad_form.html", enfermedad=actual,
@@ -370,10 +365,10 @@ def enfermedad_editar(disease_id):
               data_before=antes,
               data_after=_snapshot_enfermedad(queries.get_enfermedad(disease_id)))
     flash(f"«{datos['name']}» actualizada.", "ok")
-    return redirect(url_for("enfermedades"))
+    return redirect(url_for("main.enfermedades"))
 
 
-@app.route("/enfermedades/<int:disease_id>/estado", methods=["POST"])
+@bp.route("/enfermedades/<int:disease_id>/estado", methods=["POST"])
 @roles_required("EPIDEMIOLOGO", "ADMINISTRADOR")
 def enfermedad_estado(disease_id):
     """Baja y alta logica del catalogo. Nunca borra: los casos capturados
@@ -381,7 +376,7 @@ def enfermedad_estado(disease_id):
     actual = queries.get_enfermedad(disease_id)
     if not actual:
         flash("Esa enfermedad ya no existe en el catálogo.", "error")
-        return redirect(url_for("enfermedades"))
+        return redirect(url_for("main.enfermedades"))
 
     activa = request.form.get("activa") == "1"
     queries.set_enfermedad_activa(disease_id, activa)
@@ -389,10 +384,10 @@ def enfermedad_estado(disease_id):
               data_before=_snapshot_enfermedad(actual),
               data_after=_snapshot_enfermedad(queries.get_enfermedad(disease_id)))
     flash(f"«{actual['name']}» quedó {'activa' if activa else 'inactiva'} en el catálogo.", "ok")
-    return redirect(request.referrer or url_for("enfermedades"))
+    return redirect(request.referrer or url_for("main.enfermedades"))
 
 
-@app.route("/export/enfermedades.csv")
+@bp.route("/export/enfermedades.csv")
 @login_required
 def export_enfermedades_csv():
     filtros = _filtros_enfermedades(request.args)
@@ -418,7 +413,7 @@ def export_enfermedades_csv():
 # ---------------------------------------------------------------------------
 # Extras chicos pero reales: exportar CSV, y stubs para el resto del sidebar
 # ---------------------------------------------------------------------------
-@app.route("/export/resumen.csv")
+@bp.route("/export/resumen.csv")
 @login_required
 def export_resumen_csv():
     log_audit(g.user["sub"], "EXPORT", "reports", entity_id="resumen_situacion")
@@ -461,7 +456,7 @@ def _monitoreo_url(filtros):
     return {nombres[k]: v for k, v in filtros.items() if v}
 
 
-@app.route("/monitoreo")
+@bp.route("/monitoreo")
 @login_required
 def monitoreo():
     f = _filtros_monitoreo(request.args)
@@ -493,7 +488,7 @@ def monitoreo():
     )
 
 
-@app.route("/export/monitoreo.csv")
+@bp.route("/export/monitoreo.csv")
 @login_required
 def export_monitoreo_csv():
     f = _filtros_monitoreo(request.args)
@@ -520,7 +515,7 @@ def export_monitoreo_csv():
 # 7. Usuarios y Auditoria -- adaptadas del diseno de la companera, con datos
 #    reales de Postgres (ver notas de alcance en queries.py)
 # ---------------------------------------------------------------------------
-@app.route("/usuarios")
+@bp.route("/usuarios")
 @admin_required
 def usuarios():
     busqueda = request.args.get("q") or None
@@ -548,10 +543,6 @@ def usuarios():
 # ---------------------------------------------------------------------------
 # Cada operacion queda en audit_log con el estado antes/despues.
 
-def _hash_password(password):
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(12)).decode("utf-8")
-
-
 def _snapshot(u):
     """Lo que se guarda en audit_log. Nunca incluye password_hash."""
     if not u:
@@ -566,7 +557,7 @@ def _snapshot(u):
     }
 
 
-@app.route("/usuarios/nuevo", methods=["GET", "POST"])
+@bp.route("/usuarios/nuevo", methods=["GET", "POST"])
 @admin_required
 def usuario_nuevo():
     roles = queries.get_roles_catalogo()
@@ -594,7 +585,7 @@ def usuario_nuevo():
 
     nuevo_id, error = queries.crear_usuario(
         datos["username"], datos["email"], datos["full_name"],
-        _hash_password(password), role_id, datos["is_active"],
+        hash_password(password), role_id, datos["is_active"],
     )
     if error:
         return render_template("usuario_form.html", roles=roles, usuario=datos,
@@ -603,16 +594,16 @@ def usuario_nuevo():
     log_audit(g.user["sub"], "CREATE", "users", entity_id=str(nuevo_id),
               data_after=_snapshot(queries.get_usuario(nuevo_id)))
     flash(f"Usuario '{datos['username'].lower()}' creado.", "ok")
-    return redirect(url_for("usuarios"))
+    return redirect(url_for("main.usuarios"))
 
 
-@app.route("/usuarios/<int:user_id>/editar", methods=["GET", "POST"])
+@bp.route("/usuarios/<int:user_id>/editar", methods=["GET", "POST"])
 @admin_required
 def usuario_editar(user_id):
     actual = queries.get_usuario(user_id)
     if not actual:
         flash("Ese usuario ya no existe.", "error")
-        return redirect(url_for("usuarios"))
+        return redirect(url_for("main.usuarios"))
 
     roles = queries.get_roles_catalogo()
     if request.method == "GET":
@@ -651,7 +642,7 @@ def usuario_editar(user_id):
     antes = _snapshot(actual)
     ok, error = queries.actualizar_usuario(
         user_id, datos["email"], datos["full_name"], datos["is_active"], role_id,
-        password_hash=_hash_password(password) if password else None,
+        password_hash=hash_password(password) if password else None,
     )
     if not ok:
         vista = {**actual, **datos, "role_id": role_id}
@@ -662,10 +653,10 @@ def usuario_editar(user_id):
               data_before=antes,
               data_after=_snapshot(queries.get_usuario(user_id)))
     flash(f"Usuario '{actual['username']}' actualizado.", "ok")
-    return redirect(url_for("usuarios"))
+    return redirect(url_for("main.usuarios"))
 
 
-@app.route("/usuarios/<int:user_id>/estado", methods=["POST"])
+@bp.route("/usuarios/<int:user_id>/estado", methods=["POST"])
 @admin_required
 def usuario_estado(user_id):
     """Baja / alta logica (is_active). Es la via correcta cuando el usuario ya
@@ -673,32 +664,32 @@ def usuario_estado(user_id):
     actual = queries.get_usuario(user_id)
     if not actual:
         flash("Ese usuario ya no existe.", "error")
-        return redirect(url_for("usuarios"))
+        return redirect(url_for("main.usuarios"))
 
     activar = request.form.get("activar") == "1"
     if user_id == g.user["sub"] and not activar:
         flash("No puedes desactivar tu propia cuenta.", "error")
-        return redirect(url_for("usuarios"))
+        return redirect(url_for("main.usuarios"))
 
     queries.desactivar_usuario(user_id, activo=activar)
     log_audit(g.user["sub"], "UPDATE", "users", entity_id=str(user_id),
               data_before=_snapshot(actual),
               data_after=_snapshot(queries.get_usuario(user_id)))
     flash(("Usuario reactivado." if activar else "Usuario desactivado (baja logica)."), "ok")
-    return redirect(url_for("usuarios"))
+    return redirect(url_for("main.usuarios"))
 
 
-@app.route("/usuarios/<int:user_id>/eliminar", methods=["POST"])
+@bp.route("/usuarios/<int:user_id>/eliminar", methods=["POST"])
 @admin_required
 def usuario_eliminar(user_id):
     actual = queries.get_usuario(user_id)
     if not actual:
         flash("Ese usuario ya no existe.", "error")
-        return redirect(url_for("usuarios"))
+        return redirect(url_for("main.usuarios"))
 
     if user_id == g.user["sub"]:
         flash("No puedes eliminar tu propia cuenta.", "error")
-        return redirect(url_for("usuarios"))
+        return redirect(url_for("main.usuarios"))
 
     dependencias = queries.dependencias_usuario(user_id)
     if dependencias:
@@ -706,21 +697,21 @@ def usuario_eliminar(user_id):
         flash(f"No se puede eliminar a '{actual['username']}': tiene {detalle}. "
               f"Usa 'Desactivar' para darlo de baja sin perder esa trazabilidad.",
               "error")
-        return redirect(url_for("usuarios"))
+        return redirect(url_for("main.usuarios"))
 
     antes = _snapshot(actual)
     ok, error = queries.eliminar_usuario(user_id)
     if not ok:
         flash(error, "error")
-        return redirect(url_for("usuarios"))
+        return redirect(url_for("main.usuarios"))
 
     log_audit(g.user["sub"], "DELETE", "users", entity_id=str(user_id),
               data_before=antes)
     flash(f"Usuario '{actual['username']}' eliminado.", "ok")
-    return redirect(url_for("usuarios"))
+    return redirect(url_for("main.usuarios"))
 
 
-@app.route("/auditoria")
+@bp.route("/auditoria")
 @admin_required
 def auditoria():
     # Solo ADMINISTRADOR: la bitacora expone quien hizo que y desde que IP en
@@ -755,12 +746,25 @@ def auditoria():
     )
 
 
-@app.route("/stub/<name>")
+@bp.route("/stub/<name>")
 @login_required
 def stub(name):
     titulo = STUB_ITEMS.get(name, name.capitalize())
     return render_template("stub.html", titulo=titulo, active_nav=name)
 
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+@bp.app_errorhandler(403)
+def sin_permiso(_):
+    return render_template(
+        "error.html", codigo="403", titulo="No tienes acceso a esta sección",
+        mensaje="Tu rol no incluye permiso para ver esta página. "
+                "Pide acceso a un administrador si lo necesitas.",
+    ), 403
+
+
+@bp.app_errorhandler(404)
+def no_encontrado(_):
+    return render_template(
+        "error.html", codigo="404", titulo="Esta página no existe",
+        mensaje="Revisa la dirección o vuelve al panorama epidemiológico.",
+    ), 404

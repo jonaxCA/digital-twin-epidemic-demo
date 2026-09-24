@@ -2,8 +2,8 @@
 Genera nl_municipios_completos.sql: agrega a la tabla `regions` los 41
 municipios de Nuevo Leon que no vienen en 010_datos_iniciales.sql.
 
-Requiere haber corrido antes scripts/build_municipios_inegi.py (usa su salida
-data/geo/nl_centroides.json, que trae los 51 municipios con centroide
+Requiere haber corrido antes datos/scripts/build_municipios_inegi.py (usa su salida
+datos/geo/nl_centroides.json, que trae los 51 municipios con centroide
 calculado sobre la geometria oficial de INEGI).
 
 Poblacion: NO es dato de censo oficial verificado para los 41 municipios
@@ -13,15 +13,15 @@ el valor exacto no cambia nada visible). Si necesitas cifras reales, sustituye
 POBLACION_APROX por datos del censo de INEGI.
 
 Uso (desde la raiz del proyecto, despues de build_municipios_inegi.py):
-    python3 scripts/build_regiones_sql.py > db/datos/nl_municipios_completos.sql
+    python3 datos/scripts/build_regiones_sql.py > datos/postgres/semillas/nl_municipios_completos.sql
 """
 import json
 import os
 import sys
 
-# Raiz del proyecto: este script vive en scripts/.
+# Carpeta datos/: este script vive en datos/scripts/.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GEO_DIR = os.path.join(BASE_DIR, "data", "geo")
+GEO_DIR = os.path.join(BASE_DIR, "geo")
 
 POBLACION_APROX = {
     "001": 2600, "002": 3500, "003": 1200, "004": 33000, "005": 19000,

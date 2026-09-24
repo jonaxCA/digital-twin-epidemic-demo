@@ -6,11 +6,11 @@ No es parte de la migracion oficial (001-010). Es justo lo que 010_datos_inicial
 dice que va "en un archivo aparte de datos de demostracion". Se puede volver a correr:
 al inicio trunca las tablas que llena, asi que es seguro repetirlo sobre la misma base.
 
-Requiere haber corrido antes db/dump_completo.sql.
+Requiere haber corrido antes datos/postgres/dump_completo.sql.
 
 Uso (desde la raiz del proyecto):
-  python3 scripts/gen_demo_data.py > db/datos/demo_datos_nl.sql
-  psql -d simulador_epidemico -v ON_ERROR_STOP=1 -f db/datos/demo_datos_nl.sql
+  python3 datos/scripts/gen_demo_data.py > datos/postgres/semillas/demo_datos_nl.sql
+  psql -d simulador_epidemico -v ON_ERROR_STOP=1 -f datos/postgres/semillas/demo_datos_nl.sql
 
 Ojo: cada corrida genera un hash bcrypt nuevo para la usuaria de demostracion,
 asi que regenerar el archivo cambia esa linea aunque los datos sean los mismos.

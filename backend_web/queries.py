@@ -23,7 +23,7 @@ from datetime import date, timedelta
 
 import psycopg2
 
-from db import execute, get_conn, query
+from .db import execute, get_conn, query
 
 NL_ESTADO_CODE = "19"
 

@@ -18,7 +18,7 @@
       <div class="login-error">{{ error }}</div>
       {% endif %}
 
-      <form method="post" action="{{ url_for('login', next=request.args.get('next')) }}">
+      <form method="post" action="{{ url_for('main.login', next=request.args.get('next')) }}">
         <div class="field">
           <label for="usuario">Usuario o Correo Electrónico</label>
           <input type="text" id="usuario" name="usuario" placeholder="ej. d.hernandez@salud.gov"
