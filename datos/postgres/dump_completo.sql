@@ -2,17 +2,18 @@
 -- dump_completo.sql
 -- Simulador de respuesta a epidemias — construccion completa de la base
 --
--- Archivo generado automaticamente concatenando, en orden, las 14 migraciones
+-- Archivo generado automaticamente concatenando, en orden, las 17 migraciones
 -- numeradas del proyecto:
---   001_base.sql            006_escenarios.sql        011_fix_audit_log_delete.sql
---   002_seguridad.sql       007_simulacion.sql        012_corrige_claves_inegi_nl.sql
---   003_sistema.sql         008_comentarios.sql       013_escenarios_aprobacion.sql
---   004_catalogos.sql       009_roles_bd.sql          014_simulacion_resultados.sql
---   005_vigilancia.sql      010_datos_iniciales.sql
+--   001_base.sql            007_simulacion.sql          013_escenarios_aprobacion.sql
+--   002_seguridad.sql       008_comentarios.sql         014_simulacion_resultados.sql
+--   003_sistema.sql         009_roles_bd.sql            015_poblacion_censo_2020.sql
+--   004_catalogos.sql       010_datos_iniciales.sql     016_poblacion_60mas.sql
+--   005_vigilancia.sql      011_fix_audit_log_delete.sql   017_parametros_enfermedades.sql
+--   006_escenarios.sql      012_corrige_claves_inegi_nl.sql
 --
 -- Cada bloque original conserva su propio BEGIN/COMMIT y su propio INSERT en
 -- schema_migrations, asi que este archivo se comporta exactamente igual que
--- correr los 14 .sql uno por uno, pero en una sola pasada.
+-- correr los 17 .sql uno por uno, pero en una sola pasada.
 --
 -- Una base creada con una version anterior de este archivo se actualiza
 -- volviendolo a correr completo: lo existente no se duplica y se aplican las
@@ -1470,12 +1471,12 @@ FROM (VALUES
     ('19019', 'San Pedro Garza Garcia', 132169, 25.657900, -100.402200),
     ('19026', 'Guadalupe',           643143, 25.676800, -100.259700),
     ('19006', 'Apodaca',             656464, 25.781900, -100.188600),
-    ('19021', 'General Escobedo',    481157, 25.795400, -100.318100),
+    ('19021', 'General Escobedo',    481213, 25.795400, -100.318100),
     ('19046', 'San Nicolas de los Garza', 412199, 25.741700, -100.302800),
     ('19048', 'Santa Catarina',      306322, 25.673100, -100.458300),
-    ('19031', 'Juarez',              466465, 25.646600, -100.096100),
-    ('19018', 'Garcia',              412199, 25.813300, -100.585600),
-    ('19049', 'Santiago',             45988, 25.424700, -100.147200)
+    ('19031', 'Juarez',              471523, 25.646600, -100.096100),
+    ('19018', 'Garcia',              397205, 25.813300, -100.585600),
+    ('19049', 'Santiago',             46784, 25.424700, -100.147200)
 ) AS v(code, name, pob, lat, lon)
 CROSS JOIN (SELECT id FROM regions WHERE code = '19') e
 ON CONFLICT (code) DO NOTHING;
@@ -2001,6 +2002,326 @@ COMMENT ON COLUMN intervention_types.cost_is_assumption IS
 
 INSERT INTO schema_migrations (version, description)
 VALUES ('014', 'Simulacion: motor de referencia, resultados en PostgreSQL y costos de intervencion')
+ON CONFLICT (version) DO NOTHING;
+
+COMMIT;
+-- =============================================================================
+-- 015_poblacion_censo_2020.sql
+-- Dominio: catalogos.
+--
+-- Pone la poblacion de los 51 municipios en la cifra del Censo de Poblacion y
+-- Vivienda 2020 de INEGI.
+--
+-- POR QUE
+-- Los 41 municipios que carga nl_municipios_completos.sql llevaban
+-- aproximaciones de orden de magnitud, con errores de hasta 82%: Pesqueria
+-- tenia 26,000 habitantes contra 147,624 reales, El Carmen 40,000 contra
+-- 104,478 y General Zuazua 50,000 contra 102,149. Como la incidencia se calcula
+-- por cada 100,000 habitantes, esos municipios aparecian con una incidencia
+-- inflada hasta seis veces justo donde mas ha crecido la poblacion.
+-- Ademas, cuatro de los 10 municipios de 010 tampoco eran censales; el caso mas
+-- claro era Garcia, que traia 412,199, exactamente la poblacion de San Nicolas.
+--
+-- Los archivos de instalacion ya traen las cifras correctas, asi que en una
+-- base nueva esta migracion no cambia nada. Existe para las bases ya creadas.
+-- Es idempotente: solo toca las filas cuyo valor difiere.
+--
+-- FUENTE: INEGI, Censo de Poblacion y Vivienda 2020. Ver
+-- data/censo/nl_poblacion_municipios_1990_2020.tsv, que documenta la consulta y
+-- de donde salio cada cifra. La suma de los 51 municipios es 5,784,442,
+-- identica al total estatal del censo.
+-- =============================================================================
+
+BEGIN;
+
+UPDATE regions r
+SET    population = v.pob
+FROM (VALUES
+    ('19001',      2974),   -- Abasolo
+    ('19002',      3382),   -- Agualeguas
+    ('19003',      1407),   -- Los Aldamas
+    ('19004',     35289),   -- Allende
+    ('19005',     18030),   -- Anáhuac
+    ('19006',    656464),   -- Apodaca
+    ('19007',     14992),   -- Aramberri
+    ('19008',      3661),   -- Bustamante
+    ('19009',    122337),   -- Cadereyta Jiménez
+    ('19010',    104478),   -- El Carmen
+    ('19011',      7340),   -- Cerralvo
+    ('19012',     68747),   -- Ciénega de Flores
+    ('19013',      9930),   -- China
+    ('19014',     36088),   -- Doctor Arroyo
+    ('19015',      1360),   -- Doctor Coss
+    ('19016',      3256),   -- Doctor González
+    ('19017',     40903),   -- Galeana
+    ('19018',    397205),   -- García
+    ('19019',    132169),   -- San Pedro Garza García
+    ('19020',      5506),   -- General Bravo
+    ('19021',    481213),   -- General Escobedo
+    ('19022',     14109),   -- General Terán
+    ('19023',      1808),   -- General Treviño
+    ('19024',      6282),   -- General Zaragoza
+    ('19025',    102149),   -- General Zuazua
+    ('19026',    643143),   -- Guadalupe
+    ('19027',      1959),   -- Los Herreras
+    ('19028',      1386),   -- Higueras
+    ('19029',      7026),   -- Hualahuises
+    ('19030',      3298),   -- Iturbide
+    ('19031',    471523),   -- Juárez
+    ('19032',      5351),   -- Lampazos de Naranjo
+    ('19033',     84666),   -- Linares
+    ('19034',      5119),   -- Marín
+    ('19035',      1483),   -- Melchor Ocampo
+    ('19036',      7652),   -- Mier y Noriega
+    ('19037',      6048),   -- Mina
+    ('19038',     67428),   -- Montemorelos
+    ('19039',   1142994),   -- Monterrey
+    ('19040',       906),   -- Parás
+    ('19041',    147624),   -- Pesquería
+    ('19042',      5389),   -- Los Ramones
+    ('19043',      2377),   -- Rayones
+    ('19044',     34709),   -- Sabinas Hidalgo
+    ('19045',     86766),   -- Salinas Victoria
+    ('19046',    412199),   -- San Nicolás de los Garza
+    ('19047',     16086),   -- Hidalgo
+    ('19048',    306322),   -- Santa Catarina
+    ('19049',     46784),   -- Santiago
+    ('19050',      1552),   -- Vallecillo
+    ('19051',      3573)   -- Villaldama
+) AS v(code, pob)
+WHERE  r.code = v.code
+  AND  r.population IS DISTINCT FROM v.pob;
+
+INSERT INTO schema_migrations (version, description)
+VALUES ('015', 'Catalogos: poblacion municipal del Censo 2020 de INEGI')
+ON CONFLICT (version) DO NOTHING;
+
+COMMIT;
+-- =============================================================================
+-- 016_poblacion_60mas.sql
+-- Dominio: catalogos.
+--
+-- Agrega a `regions` la poblacion de 60 anios y mas y la llena con el Censo
+-- 2020 de INEGI para los 51 municipios y para el estado.
+--
+-- PARA QUE
+-- El motor prioriza la vacunacion por edad (parametro edad_minima). Para
+-- dimensionar una campania dirigida a 60+ en un municipio hace falta saber
+-- cuanta gente de esa edad vive ahi, no la proporcion del estado: va de 2.7% en
+-- El Carmen a 28.8% en Los Herreras, diez veces de diferencia. Usar el promedio
+-- estatal (654,050 / 5,784,442 = 11.31%) subestimaria el grupo de riesgo en
+-- los municipios rurales y lo sobrestimaria en los de crecimiento reciente.
+--
+-- FUENTE: INEGI, Censo 2020, ITER de la entidad 19, filas "Total del
+-- Municipio", columna P_60YMAS. Ver data/censo/nl_poblacion_60mas_2020.tsv,
+-- que documenta la descarga y las dos validaciones cruzadas que se le hicieron.
+--
+-- La columna queda opcional: una region sin el dato (una AGEB, por ejemplo) es
+-- valida. Lo que no se admite es mas gente de 60+ que habitantes.
+-- Es idempotente.
+-- =============================================================================
+
+BEGIN;
+
+ALTER TABLE regions
+    ADD COLUMN IF NOT EXISTS population_60plus INTEGER;
+
+ALTER TABLE regions
+    DROP CONSTRAINT IF EXISTS ck_regions_poblacion_60,
+    ADD  CONSTRAINT ck_regions_poblacion_60 CHECK (
+        population_60plus IS NULL
+        OR (population_60plus >= 0
+            AND (population IS NULL OR population_60plus <= population))
+    );
+
+COMMENT ON COLUMN regions.population_60plus IS
+    'Personas de 60 anios y mas (Censo 2020, INEGI). Grupo objetivo de las campanias de vacunacion por edad.';
+
+UPDATE regions r
+SET    population_60plus = v.p60
+FROM (VALUES
+    ('19001',     328),   -- Abasolo
+    ('19002',     878),   -- Agualeguas
+    ('19003',     380),   -- Los Aldamas
+    ('19004',    4687),   -- Allende
+    ('19005',    2651),   -- Anáhuac
+    ('19006',   40606),   -- Apodaca
+    ('19007',    2755),   -- Aramberri
+    ('19008',     669),   -- Bustamante
+    ('19009',   12403),   -- Cadereyta Jiménez
+    ('19010',    2810),   -- El Carmen
+    ('19011',    1207),   -- Cerralvo
+    ('19012',    2762),   -- Ciénega de Flores
+    ('19013',    1777),   -- China
+    ('19014',    5646),   -- Doctor Arroyo
+    ('19015',     327),   -- Doctor Coss
+    ('19016',     482),   -- Doctor González
+    ('19017',    6380),   -- Galeana
+    ('19018',   13037),   -- García
+    ('19019',   25456),   -- San Pedro Garza García
+    ('19020',     923),   -- General Bravo
+    ('19021',   32366),   -- General Escobedo
+    ('19022',    2905),   -- General Terán
+    ('19023',     476),   -- General Treviño
+    ('19024',     965),   -- General Zaragoza
+    ('19025',    3162),   -- General Zuazua
+    ('19026',  103783),   -- Guadalupe
+    ('19027',     564),   -- Los Herreras
+    ('19028',     249),   -- Higueras
+    ('19029',    1256),   -- Hualahuises
+    ('19030',     603),   -- Iturbide
+    ('19031',   19180),   -- Juárez
+    ('19032',     849),   -- Lampazos de Naranjo
+    ('19033',   11279),   -- Linares
+    ('19034',     638),   -- Marín
+    ('19035',     305),   -- Melchor Ocampo
+    ('19036',    1130),   -- Mier y Noriega
+    ('19037',     713),   -- Mina
+    ('19038',    9394),   -- Montemorelos
+    ('19039',  193946),   -- Monterrey
+    ('19040',     258),   -- Parás
+    ('19041',    4459),   -- Pesquería
+    ('19042',    1310),   -- Los Ramones
+    ('19043',     476),   -- Rayones
+    ('19044',    5386),   -- Sabinas Hidalgo
+    ('19045',    4301),   -- Salinas Victoria
+    ('19046',   83997),   -- San Nicolás de los Garza
+    ('19047',    2149),   -- Hidalgo
+    ('19048',   32877),   -- Santa Catarina
+    ('19049',    7699),   -- Santiago
+    ('19050',     378),   -- Vallecillo
+    ('19051',     833)   -- Villaldama
+) AS v(code, p60)
+WHERE  r.code = v.code
+  AND  r.population_60plus IS DISTINCT FROM v.p60;
+
+-- El estado: la suma de los 51 municipios, que coincide con el tabulado
+-- estatal por grupo quinquenal de edad.
+UPDATE regions
+SET    population_60plus = 654050
+WHERE  code = '19'
+  AND  population_60plus IS DISTINCT FROM 654050;
+
+INSERT INTO schema_migrations (version, description)
+VALUES ('016', 'Catalogos: poblacion de 60 anios y mas por municipio (Censo 2020)')
+ON CONFLICT (version) DO NOTHING;
+
+COMMIT;
+-- =============================================================================
+-- 017_parametros_enfermedades.sql
+-- Dominio: catalogos.
+--
+-- Carga los parametros epidemiologicos de COVID-19 (linaje ancestral) e
+-- influenza estacional, cada uno con su fuente o con la marca explicita de
+-- supuesto, en el formato que consume el motor:
+--     {"valor": 1.28, "fuente": "...", "supuesto": false}
+--
+-- POR QUE UNA MIGRACION Y NO CAPTURA A MANO
+-- Sin esto, los parametros solo existen en la base donde alguien los capturo:
+-- una instalacion nueva deja las dos enfermedades sin poder simularse, que es
+-- justo lo que bloquea el resto del flujo. Con la migracion, cualquier
+-- instalacion arranca con las dos enfermedades listas.
+--
+-- QUE TRAE FUENTE Y QUE ES SUPUESTO
+-- Cuatro parametros de cada enfermedad citan un articulo publicado; la cifra se
+-- verifico en el texto de la fuente antes de capturarla. Los otros dos van
+-- marcados como supuesto, y su campo "fuente" explica que dice el estudio y que
+-- decidio el equipo:
+--   - Influenza, tasa de hospitalizacion y letalidad: el CDC las publica por
+--     caso sintomatico y el motor las necesita por infeccion. La conversion
+--     (66.9% de infecciones sintomaticas, Carrat 2008) es del equipo.
+--   - COVID, periodo infeccioso: Cevik 2021 reporta que no se aislo virus
+--     viable despues del dia 9. Es un maximo, no un promedio.
+--   - COVID, estancia hospitalaria: Rees 2020 reporta medianas de 4 a 21 dias;
+--     elegir un punto del rango es decision del equipo.
+--
+-- Ninguno esta calibrado para Nuevo Leon: son estimaciones de literatura
+-- internacional. Calibrar contra datos locales es trabajo posterior.
+--
+-- SE RESPETA LO QUE YA HAYA: el operador || fusiona, asi que las claves que no
+-- se mencionan (transmisibilidad_base, letalidad_por_edad, prob_asintomatico)
+-- quedan intactas. Y solo actua si la enfermedad todavia no tiene r0, para no
+-- pisar parametros que alguien haya capturado o corregido desde la pantalla.
+-- =============================================================================
+
+BEGIN;
+
+-- Influenza estacional A(H1N1)
+UPDATE diseases
+SET    default_params = default_params || '{
+            "dias_hospitalizacion": {
+                    "fuente": "Descamps et al. 2022, Eur Respir J 59(3):2100651. Mediana de estancia en 437 adultos hospitalizados con influenza, Francia 2017-2019. doi:10.1183/13993003.00651-2021",
+                    "supuesto": false,
+                    "valor": 6.0
+            },
+            "incubacion_dias": {
+                    "fuente": "Lessler et al. 2009, Lancet Infect Dis 9(5):291-300. Mediana para influenza A. doi:10.1016/S1473-3099(09)70069-6",
+                    "supuesto": false,
+                    "valor": 1.4
+            },
+            "infeccioso_dias": {
+                    "fuente": "Carrat et al. 2008, Am J Epidemiol 167(7):775-785. Duracion media de excrecion viral en voluntarios (IC 4.31-5.29). doi:10.1093/aje/kwm375",
+                    "supuesto": false,
+                    "valor": 4.8
+            },
+            "letalidad": {
+                    "fuente": "DERIVADO POR EL EQUIPO: CDC temporada 2019-2020 estima 22,064 muertes entre 34,026,679 enfermedades sintomaticas (0.065% por caso sintomatico). Se convierte a por infeccion con 66.9% de infecciones sintomaticas (Carrat et al. 2008). La conversion no la publica el CDC.",
+                    "supuesto": true,
+                    "valor": 0.000434
+            },
+            "r0": {
+                    "fuente": "Biggerstaff et al. 2014, BMC Infect Dis 14:480. Mediana de 47 estimaciones de influenza estacional (RIC 1.19-1.37). doi:10.1186/1471-2334-14-480",
+                    "supuesto": false,
+                    "valor": 1.28
+            },
+            "tasa_hospitalizacion": {
+                    "fuente": "DERIVADO POR EL EQUIPO: CDC temporada 2019-2020 estima 381,099 hospitalizaciones entre 34,026,679 enfermedades sintomaticas (1.12% por caso sintomatico). Se convierte a por infeccion con 66.9% de infecciones sintomaticas (Carrat et al. 2008). La conversion no la publica el CDC.",
+                    "supuesto": true,
+                    "valor": 0.00749
+            }
+    }'::jsonb
+WHERE  code = 'INFLUENZA_ESTACIONAL'
+  AND  NOT (default_params ? 'r0');
+
+-- SARS-CoV-2 (linaje ancestral)
+UPDATE diseases
+SET    default_params = default_params || '{
+            "dias_hospitalizacion": {
+                    "fuente": "SUPUESTO DEL EQUIPO dentro del rango de Rees et al. 2020, BMC Med 18:270: las medianas de estancia van de 4 a 21 dias fuera de China entre 45 estudios. El valor puntual lo elige el equipo. doi:10.1186/s12916-020-01726-3",
+                    "supuesto": true,
+                    "valor": 8.0
+            },
+            "incubacion_dias": {
+                    "fuente": "Lauer et al. 2020, Ann Intern Med 172(9):577-582. Mediana 5.1 dias (IC 4.5-5.8), 181 casos confirmados. doi:10.7326/M20-0504",
+                    "supuesto": false,
+                    "valor": 5.1
+            },
+            "infeccioso_dias": {
+                    "fuente": "SUPUESTO DEL EQUIPO sobre Cevik et al. 2021, Lancet Microbe 2(1):e13-e22: ningun estudio detecto virus viable despues del dia 9 de enfermedad. Eso es un maximo, no un promedio, asi que usarlo como duracion media sobreestima. doi:10.1016/S2666-5247(20)30172-5",
+                    "supuesto": true,
+                    "valor": 9.0
+            },
+            "letalidad": {
+                    "fuente": "Salje et al. 2020, Science 369(6500):208-211. IFR 0.5% (IC 0.3-0.9), Francia, linaje ancestral. doi:10.1126/science.abc3517",
+                    "supuesto": false,
+                    "valor": 0.005
+            },
+            "r0": {
+                    "fuente": "Billah et al. 2020, PLoS ONE 15(11):e0242128. Meta-analisis global, R0 agrupado 2.87 (IC 2.39-3.44). doi:10.1371/journal.pone.0242128",
+                    "supuesto": false,
+                    "valor": 2.87
+            },
+            "tasa_hospitalizacion": {
+                    "fuente": "Salje et al. 2020, Science 369(6500):208-211. 2.9% de los infectados son hospitalizados, Francia, linaje ancestral. doi:10.1126/science.abc3517",
+                    "supuesto": false,
+                    "valor": 0.029
+            }
+    }'::jsonb
+WHERE  code = 'SARS_COV_2_ANCESTRAL'
+  AND  NOT (default_params ? 'r0');
+
+INSERT INTO schema_migrations (version, description)
+VALUES ('017', 'Catalogos: parametros de COVID-19 e influenza con su fuente')
 ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

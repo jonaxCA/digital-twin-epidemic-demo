@@ -1,0 +1,32 @@
+# Poblacion total por municipio, Nuevo Leon. Serie de anios censales 1990-2020.
+#
+# FUENTE
+#   INEGI. Censos y Conteos de Poblacion y Vivienda, 1990-2020.
+#   Tabulado "Poblacion total por municipio, serie de anios censales de 1990 a 2020".
+#   Consultado el 24/09/2026 desde el sistema de tabulados interactivos del INEGI.
+#
+# NOTA SOBRE TRES VALORES DE 2020
+#   El export del tabulado corta las ultimas columnas y dejo en cero el dato 2020
+#   de Santiago, Vallecillo y Villaldama. Esos tres se tomaron de la consulta de
+#   INEGI por localidad (Principales resultados por localidad), fila del total
+#   municipal:
+#       049 Santiago    46,784
+#       050 Vallecillo   1,552
+#       051 Villaldama   3,573
+#   Los tres suman 51,909, que es exactamente la diferencia que faltaba para que
+#   2020 cuadrara con el total estatal. scripts/build_regiones_sql.py vuelve a
+#   verificar esa suma cada vez que regenera el SQL, para cualquier anio.
+#
+# FORMATO
+#   Una fila por anio censal. La primera columna de datos es el total estatal y
+#   las 51 siguientes son los municipios, en el orden del encabezado. Los nombres
+#   se resuelven a clave INEGI contra data/geo/nl_catalogo_oficial.json.
+#
+Periodo	Nuevo León	Abasolo	Agualeguas	Allende	Anáhuac	Apodaca	Aramberri	Bustamante	Cadereyta Jiménez	Carmen	Cerralvo	China	Ciénega de Flores	Doctor Arroyo	Doctor Coss	Doctor González	Galeana	García	General Bravo	General Escobedo	General Terán	General Treviño	General Zaragoza	General Zuazua	Guadalupe	Hidalgo	Higueras	Hualahuises	Iturbide	Juárez	Lampazos de Naranjo	Linares	Los Aldamas	Los Herreras	Los Ramones	Marín	Melchor Ocampo	Mier y Noriega	Mina	Montemorelos	Monterrey	Parás	Pesquería	Rayones	Sabinas Hidalgo	Salinas Victoria	San Nicolás de los Garza	San Pedro Garza García	Santa Catarina	Santiago	Vallecillo	Villaldama
+1990	3,098,736	1,373	5,095	22,211	17,316	115,913	15,295	2,976	53,582	4,906	7,653	12,404	6,708	36,946	2,961	3,011	40,972	13,164	6,759	98,147	16,656	2,182	5,532	4,647	535,560	11,668	1,060	6,222	3,638	28,014	5,288	61,569	4,140	3,363	6,538	3,292	1,641	7,240	4,564	49,302	1,069,238	1,021	8,188	3,164	27,550	9,518	436,603	113,040	163,848	30,182	2,723	4,153
+1995	3,550,114	1,945	4,492	23,053	18,278	219,153	15,691	3,308	62,440	6,168	8,287	12,064	8,586	37,363	2,286	2,912	42,145	23,981	6,030	176,869	16,609	1,695	5,874	5,276	618,933	13,552	1,218	6,535	3,522	50,009	5,294	66,104	2,445	2,860	5,236	4,014	1,121	7,721	4,783	51,714	1,088,143	1,087	9,359	2,791	31,521	15,925	487,924	120,913	202,156	34,187	2,188	4,354
+2000	3,834,141	2,514	4,390	27,773	18,524	283,497	14,840	3,499	75,059	6,644	9,343	11,540	11,204	33,721	2,246	3,185	39,519	28,974	5,799	233,457	15,475	1,699	5,576	6,033	670,162	14,275	1,371	6,413	3,484	66,497	5,305	69,205	2,464	2,795	6,237	4,719	1,215	7,078	5,049	52,741	1,110,997	1,226	11,321	2,613	32,329	19,024	496,878	125,978	227,026	36,812	2,169	4,247
+2005	4,199,292	2,746	3,537	29,568	17,983	418,784	14,692	3,326	73,746	6,996	8,009	10,697	14,268	33,269	1,639	3,092	38,930	51,658	5,385	299,364	14,022	1,476	5,733	6,985	691,931	15,480	1,427	6,631	3,533	144,380	4,428	71,061	1,675	1,877	6,227	5,398	1,052	7,047	5,384	53,854	1,133,814	950	12,258	2,576	32,040	27,848	476,761	122,009	259,896	37,886	1,859	4,105
+2010	4,653,458	2,791	3,443	32,593	18,480	523,370	15,470	3,773	86,445	16,092	7,855	10,864	24,526	35,445	1,716	3,345	39,991	143,668	5,527	357,937	14,437	1,277	5,942	55,213	678,006	16,604	1,594	6,914	3,558	256,970	5,349	78,669	1,374	2,030	5,359	5,488	862	7,095	5,447	59,113	1,135,550	1,034	20,843	2,628	34,671	32,660	443,273	122,659	268,955	40,469	1,971	4,113
+2015	5,119,504	2,639	2,439	34,353	18,194	597,207	16,152	3,977	95,534	38,306	7,757	10,835	42,715	34,110	1,632	2,861	41,130	247,370	5,479	425,148	14,795	1,044	6,011	67,294	682,880	13,836	1,511	6,921	3,571	333,481	5,238	79,853	1,292	1,764	4,469	5,630	955	6,996	5,326	60,829	1,109,171	971	87,168	2,640	35,456	54,192	430,143	123,156	296,954	42,407	1,632	4,080
+2020	5,784,442	2,974	3,382	35,289	18,030	656,464	14,992	3,661	122,337	104,478	7,340	9,930	68,747	36,088	1,360	3,256	40,903	397,205	5,506	481,213	14,109	1,808	6,282	102,149	643,143	16,086	1,386	7,026	3,298	471,523	5,351	84,666	1,407	1,959	5,389	5,119	1,483	7,652	6,048	67,428	1,142,994	906	147,624	2,377	34,709	86,766	412,199	132,169	306,322	46,784	1,552	3,573

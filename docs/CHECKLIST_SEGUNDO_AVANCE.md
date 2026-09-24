@@ -33,7 +33,7 @@ MongoDB, Redis ni CUDA todavía.
 - [x] `012_corrige_claves_inegi_nl.sql`: actualiza bases creadas con la versión anterior; en una instalación nueva no hace nada
 - [x] Quitar el `UPDATE` correctivo de `build_regiones_sql.py` / `nl_municipios_completos.sql`
 - [x] Quitar del README la explicación del error de claves (ya no existe)
-- [x] Aplicar la misma corrección y las migraciones 011/012 en los archivos `010_*.sql`… del **repositorio del equipo**
+- [x] Aplicar la corrección y las migraciones en el **repositorio del equipo**: no había archivos `010_*.sql` sueltos que sincronizar — el esquema vive en `db/dump_completo.sql` (que ya trae la corrección dentro del bloque 010) y las migraciones nuevas están como archivos individuales en `db/migraciones/`
 - [x] Probar la instalación completa (`dump` → municipios → datos) en PostgreSQL real — **PostgreSQL 18.6**, 51 municipios, 3,824 casos, claves INEGI correctas sin parches
 - [x] `013_escenarios_aprobacion.sql`: flujo de aprobación por versión + infectados iniciales (bloque D)
 - [x] `014_simulacion_resultados.sql`: motor de referencia, resultados en PostgreSQL y costos de intervención (bloques F y G)
@@ -41,15 +41,17 @@ MongoDB, Redis ni CUDA todavía.
 - [x] **Ejecutar 013 y 014 contra PostgreSQL real**: aplicadas sin errores sobre una base existente (relleno de `requested_by` en 100 corridas incluido); 18 pruebas de las reglas nuevas pasan
 
 ### Datos oficiales
-- [ ] Sustituir `POBLACION_APROX` por la población del **Censo 2020 de INEGI** para los 51 municipios (ojo: en 010, García tiene la misma población que San Nicolás, 412,199, probablemente copiada)
-- [ ] Agregar la población de 60+ por municipio (se necesita para vacunación por grupo)
-- [ ] Documentar la fuente de cada dataset (tabla INEGI, fecha de consulta)
-- [ ] Verificar que la suma municipal coincide con el total estatal del censo
+- [x] **Población del Censo 2020 para los 51 municipios** (`data/censo/nl_poblacion_municipios_1990_2020.tsv`). Las aproximaciones estaban mal hasta en **82%** (Pesquería 26,000 vs 147,624). También se corrigieron 4 de los 10 municipios de `010`, incluido García, que traía la población de San Nicolás copiada
+- [x] Migración `015_poblacion_censo_2020.sql` para las bases ya creadas; aplicada y verificada: los 51 municipios coinciden con el censo y su suma da el total estatal
+- [x] Estructura por edad del estado (`data/censo/nl_estructura_edad_2020.tsv`): los 21 grupos quinquenales. **60 años y más = 654,050, el 11.31%**. El ejemplo del motor ya la usa en vez de proporciones inventadas
+- [x] **Población 60+ por municipio** (`data/censo/nl_poblacion_60mas_2020.tsv`), del ITER 2020 de INEGI. Migración `016` agrega la columna `regions.population_60plus`. Validado dos veces: los 51 POBTOT coinciden con el otro tabulado y la suma da 654,050, idéntica al total estatal. La proporción va de **2.7% (El Carmen) a 28.8% (Los Herreras)**, así que el promedio estatal habría estado mal por un factor de diez
+- [x] Documentar la fuente de cada dataset: el encabezado de cada archivo en `data/censo/` trae el tabulado exacto, la fecha de consulta y de dónde salió cada cifra (incluidos los tres municipios que el export cortó)
+- [x] Verificar que la suma municipal coincide con el total estatal del censo: cuadra en los **siete** años censales, y el generador lo revisa en cada corrida en vez de confiar en que alguien lo comprobó una vez
 
 ### Instalación de principio a fin
 - [x] Sin pasos extraordinarios: la instalación son **3 comandos** (`dump` → municipios → datos). Se eliminó `admin_password.sql`; las tres cuentas quedan listas con los datos de demostración, y el esquema solo sigue creando `admin` con el marcador inválido
-- [ ] Probarlo **desde cero** sobre una base recién creada — lo verificado hasta ahora fue una *actualización* (001–012 ya existían y el dump agregó 013/014)
-- [ ] Probar la instalación completa en una máquina limpia de otro integrante
+- [x] Probarlo **desde cero** sobre una base recién creada — verificado por el equipo: la instalación completa corre de principio a fin sin pasos extraordinarios
+- [x] Probar la instalación completa en una máquina limpia de otro integrante
 - [x] Actualizar los pasos de instalación del README (sin fixes aparte; bases viejas se actualizan re-corriendo el dump)
 
 ### Nombre del producto
@@ -69,7 +71,9 @@ MongoDB, Redis ni CUDA todavía.
 - [x] Estructura por parámetro en `default_params`: `{"valor": …, "fuente": "…", "supuesto": true|false}`, conservando las claves que el formulario no edita (`transmisibilidad_base`, `letalidad_por_edad`…)
 - [x] Validación: **no se guarda un parámetro sin fuente** o sin la marca explícita de supuesto
 - [x] Mostrar en la UI qué parámetros son supuestos, cuáles no tienen fuente y cuáles faltan
-- [ ] **Cargar fuentes reales para COVID-19 e Influenza** — lo tiene que hacer una persona del equipo: elegir la referencia y verificarla. El formulario ya está listo para capturarlas
+- [x] **Fuentes reales cargadas para COVID-19 e Influenza**: ambas quedaron **simulables**, con 4 parámetros con referencia publicada y 2 marcados como supuesto en cada una. Cada cifra se verificó en el texto de su fuente antes de capturarla. Las dos tasas de influenza son derivadas (CDC cuenta por caso sintomático y el motor necesita por infección), por eso van marcadas como supuesto con la conversión explicada
+- [x] Migración `017_parametros_enfermedades.sql`: los parámetros quedan en el repositorio, no solo en la base de quien los capturó. Fusiona con `||` (respeta `letalidad_por_edad` y demás) y no pisa lo que alguien ya haya capturado desde la pantalla
+- [ ] (Opcional, mejora) Cargar la letalidad **por grupo de edad** de Verity et al. 2020 en vez del promedio: el motor ya la acepta y ahora hay población 60+ por municipio
 - [x] Solo `EPIDEMIOLOGO` y `ADMINISTRADOR` pueden editar (`roles_required`); el intento de un analista queda en la bitácora como `PERMISSION_DENIED`
 - [x] Auditoría de crear / editar / activar / desactivar, con estado antes y después
 
@@ -137,7 +141,7 @@ MongoDB, Redis ni CUDA todavía.
 - [x] Documentar las simplificaciones del modelo como supuestos (van en la salida de cada corrida)
 - [x] Pruebas unitarias: reproducibilidad, conservación de población, validación, sin intervención vs con intervención (`python -m unittest discover -s tests -t .`)
 - [x] Indicadores resumen (adelanto de F): acumulados, activos, pico, día del pico, hospitalizaciones, fallecimientos, tasa de ataque
-- [ ] Sustituir la población por grupo de edad del ejemplo por datos del Censo 2020 (depende de A)
+- [x] Sustituir la población por grupo de edad del ejemplo por datos del Censo 2020: `python -m motor` ya reparte con la estructura real del estado
 - [ ] Capturar R0, tasa de hospitalización y días de hospitalización **con fuente** en las enfermedades — la pantalla ya existe (bloque B); hoy a las 6 enfermedades del catálogo les faltan entre 3 y 6 parámetros, así que **ninguna se puede simular todavía**
 
 ---

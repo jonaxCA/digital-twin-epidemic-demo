@@ -1,0 +1,45 @@
+# Poblacion de Nuevo Leon por grupo quinquenal de edad. Censo 2020.
+#
+# FUENTE
+#   INEGI. Tabulado "Poblacion total por entidad federativa y grupo quinquenal
+#   de edad segun sexo, serie de anios censales de 1990 a 2020".
+#   Consultado el 24/09/2026. Archivo original: Poblacion_01.xlsx.
+#   Este archivo se genero leyendo ese xlsx, no se capturo a mano.
+#
+# USO
+#   El motor de simulacion trabaja por grupo de edad: la letalidad y la tasa de
+#   hospitalizacion cambian muchisimo con la edad, y la vacunacion se prioriza
+#   por edad. Estos son los datos reales del estado.
+#
+#   60 anios y mas = 654,050 personas, 11.31% del estado.
+#   Es el grupo objetivo tipico de una campania de vacunacion.
+#
+# NOTA
+#   "No especificado" (18,132 personas, 0.31%) no se reparte entre
+#   los grupos: se reporta aparte. Por eso la suma de los grupos es 5,766,310 y el
+#   total estatal 5,784,442.
+#
+grupo	total	hombres	mujeres
+0 a 4 años	454909	229807	225102
+5 a 9 años	463819	235679	228140
+10 a 14 años	462720	235404	227316
+15 a 19 años	471896	240241	231655
+20 a 24 años	503826	255533	248293
+25 a 29 años	488349	248479	239870
+30 a 34 años	448470	227051	221419
+35 a 39 años	426619	215999	210620
+40 a 44 años	409490	204944	204546
+45 a 49 años	387678	194154	193524
+50 a 54 años	334439	164492	169947
+55 a 59 años	260045	126971	133074
+60 a 64 años	217238	103697	113541
+65 a 69 años	154408	72766	81642
+70 a 74 años	115822	53640	62182
+75 a 79 años	77327	35523	41804
+80 a 84 años	50350	22069	28281
+85 a 89 años	25023	10300	14723
+90 a 94 años	10365	3903	6462
+95 a 99 años	3097	1133	1964
+100 años y más	420	116	304
+No especificado	18132	9049	9083
+Total	5784442	2890950	2893492
