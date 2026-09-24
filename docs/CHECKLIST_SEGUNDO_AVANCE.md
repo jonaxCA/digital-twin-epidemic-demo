@@ -33,7 +33,7 @@ MongoDB, Redis ni CUDA todavía.
 - [x] `012_corrige_claves_inegi_nl.sql`: actualiza bases creadas con la versión anterior; en una instalación nueva no hace nada
 - [x] Quitar el `UPDATE` correctivo de `build_regiones_sql.py` / `nl_municipios_completos.sql`
 - [x] Quitar del README la explicación del error de claves (ya no existe)
-- [ ] Aplicar la misma corrección y las migraciones 011/012 en los archivos `010_*.sql`… del **repositorio del equipo**
+- [x] Aplicar la misma corrección y las migraciones 011/012 en los archivos `010_*.sql`… del **repositorio del equipo**
 - [x] Probar la instalación completa (`dump` → municipios → datos) en PostgreSQL real — **PostgreSQL 18.6**, 51 municipios, 3,824 casos, claves INEGI correctas sin parches
 - [x] `013_escenarios_aprobacion.sql`: flujo de aprobación por versión + infectados iniciales (bloque D)
 - [x] `014_simulacion_resultados.sql`: motor de referencia, resultados en PostgreSQL y costos de intervención (bloques F y G)
