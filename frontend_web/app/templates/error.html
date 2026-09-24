@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block titulo %}{{ codigo }}{% endblock %}
+{% block encabezado %}{{ titulo }}{% endblock %}
+
+{% block contenido %}
+<section class="tarjeta">
+  <div class="error">
+    <div>
+      <div class="error__codigo">{{ codigo }}</div>
+      <p class="error__mensaje">{{ mensaje }}</p>
+      <a class="btn btn--primario" href="{{ url_for('main.dashboard') }}">Volver al panorama</a>
+    </div>
+  </div>
+</section>
+{% endblock %}
