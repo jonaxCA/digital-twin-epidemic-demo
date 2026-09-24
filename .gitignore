@@ -53,8 +53,8 @@ dist/
 archivo/
 
 # Descargas completas de INEGI (el zip del Marco Geoestadístico pesa ~98 MB);
-# del repositorio solo se usa la capa data/geo/inegi_mg2024/19mun.*
-data/geo/**/*.zip
+# del repositorio solo se usa la capa datos/geo/inegi_mg2024/19mun.*
+datos/geo/**/*.zip
 
 # --- Logs y salidas temporales -----------------------------------------------
 *.log
@@ -69,3 +69,31 @@ tmp/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- CUDA --------------------------------------------------------------------
+*.i
+*.ii
+*.gpu
+*.ptx
+*.cubin
+*.fatbin
+
+# --- Android -----------------------------------------------------------------
+# build/ acotado a frontend_movil/ para no ocultar carpetas de otros componentes.
+.gradle/
+frontend_movil/**/build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.aab
+*.apk
+output-metadata.json
+*.iml
+misc.xml
+deploymentTargetDropDown.xml
+render.experimental.xml
+*.jks
+*.keystore
+google-services.json
+*.hprof
