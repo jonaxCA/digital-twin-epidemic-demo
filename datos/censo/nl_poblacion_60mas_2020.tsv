@@ -1,0 +1,78 @@
+# Poblacion de 60 anios y mas por municipio, Nuevo Leon. Censo 2020.
+#
+# FUENTE
+#   INEGI. Censo de Poblacion y Vivienda 2020, ITER (Principales resultados por
+#   localidad), entidad 19. Archivo iter_19_cpv2020_csv.zip de los datos
+#   abiertos del censo, descargado el 24/09/2026 de:
+#   https://www.inegi.org.mx/contenidos/programas/ccpv/2020/datosabiertos/iter/
+#
+#   Se tomaron unicamente las filas "Total del Municipio" y las columnas POBTOT,
+#   P_60YMAS, P_60YMAS_M y P_60YMAS_F. El zip completo (276 indicadores por
+#   localidad, 4,974 filas) no se guarda en el repositorio: solo este extracto.
+#
+# VALIDACION, hecha al generar el archivo
+#   - Los 51 valores de POBTOT coinciden con
+#     data/censo/nl_poblacion_municipios_1990_2020.tsv, que sale de otro
+#     tabulado distinto del mismo censo.
+#   - La suma de los 51 municipios da 654,050 personas de 60 y mas, identica
+#     al total estatal de data/censo/nl_estructura_edad_2020.tsv.
+#
+# POR QUE POR MUNICIPIO Y NO SOLO DEL ESTADO
+#   La proporcion de 60+ va de 2.7% en El Carmen a 28.8% en
+#   Los Herreras: diez veces de diferencia. Usar el promedio estatal
+#   (11.31%) para todos subestimaria el grupo de riesgo en los municipios
+#   rurales y lo sobrestimaria en los de crecimiento reciente. Una campania de
+#   vacunacion dirigida a 60+ se dimensiona con esta columna.
+#
+clave	municipio	poblacion_total	p60ymas	p60ymas_hombres	p60ymas_mujeres
+001	Abasolo	2974	328	155	173
+002	Agualeguas	3382	878	442	436
+003	Los Aldamas	1407	380	185	195
+004	Allende	35289	4687	2186	2501
+005	Anáhuac	18030	2651	1285	1366
+006	Apodaca	656464	40606	19272	21334
+007	Aramberri	14992	2755	1422	1333
+008	Bustamante	3661	669	335	334
+009	Cadereyta Jiménez	122337	12403	6174	6229
+010	El Carmen	104478	2810	1386	1424
+011	Cerralvo	7340	1207	606	601
+012	Ciénega de Flores	68747	2762	1425	1337
+013	China	9930	1777	872	905
+014	Doctor Arroyo	36088	5646	2909	2737
+015	Doctor Coss	1360	327	150	177
+016	Doctor González	3256	482	253	229
+017	Galeana	40903	6380	3314	3066
+018	García	397205	13037	6417	6620
+019	San Pedro Garza García	132169	25456	11494	13962
+020	General Bravo	5506	923	462	461
+021	General Escobedo	481213	32366	15723	16643
+022	General Terán	14109	2905	1434	1471
+023	General Treviño	1808	476	230	246
+024	General Zaragoza	6282	965	526	439
+025	General Zuazua	102149	3162	1544	1618
+026	Guadalupe	643143	103783	47696	56087
+027	Los Herreras	1959	564	277	287
+028	Higueras	1386	249	119	130
+029	Hualahuises	7026	1256	618	638
+030	Iturbide	3298	603	319	284
+031	Juárez	471523	19180	9451	9729
+032	Lampazos de Naranjo	5351	849	424	425
+033	Linares	84666	11279	5433	5846
+034	Marín	5119	638	323	315
+035	Melchor Ocampo	1483	305	158	147
+036	Mier y Noriega	7652	1130	600	530
+037	Mina	6048	713	367	346
+038	Montemorelos	67428	9394	4479	4915
+039	Monterrey	1142994	193946	85616	108330
+040	Parás	906	258	137	121
+041	Pesquería	147624	4459	2299	2160
+042	Los Ramones	5389	1310	666	644
+043	Rayones	2377	476	254	222
+044	Sabinas Hidalgo	34709	5386	2538	2848
+045	Salinas Victoria	86766	4301	2237	2064
+046	San Nicolás de los Garza	412199	83997	38320	45677
+047	Hidalgo	16086	2149	993	1156
+048	Santa Catarina	306322	32877	15348	17529
+049	Santiago	46784	7699	3676	4023
+050	Vallecillo	1552	378	194	184
+051	Villaldama	3573	833	404	429

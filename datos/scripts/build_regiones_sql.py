@@ -1,56 +1,106 @@
 """
-Genera nl_municipios_completos.sql: agrega a la tabla `regions` los 41
+Genera db/datos/nl_municipios_completos.sql: agrega a la tabla `regions` los 41
 municipios de Nuevo Leon que no vienen en 010_datos_iniciales.sql.
 
-Requiere haber corrido antes datos/scripts/build_municipios_inegi.py (usa su salida
-datos/geo/nl_centroides.json, que trae los 51 municipios con centroide
-calculado sobre la geometria oficial de INEGI).
+Entradas:
+  - data/censo/nl_poblacion_municipios_1990_2020.tsv  poblacion oficial (INEGI,
+    censos 1990-2020). Ver el encabezado del archivo para la fuente exacta.
+  - data/geo/nl_centroides.json       centroides calculados sobre la geometria
+    oficial; lo genera scripts/build_municipios_inegi.py
+  - data/geo/nl_catalogo_oficial.json catalogo INEGI de clave -> nombre
 
-Poblacion: NO es dato de censo oficial verificado para los 41 municipios
-nuevos -- es una aproximacion de orden de magnitud solo para que el calculo
-de incidencia no falle (estos municipios no llevan casos sinteticos, asi que
-el valor exacto no cambia nada visible). Si necesitas cifras reales, sustituye
-POBLACION_APROX por datos del censo de INEGI.
+La poblacion ya NO es aproximada: sale del censo. Antes estos 41 municipios
+llevaban cifras de orden de magnitud, con errores de hasta 82% (Pesqueria tenia
+26,000 contra 147,624 reales), lo que distorsionaba la incidencia por cada
+100,000 habitantes justo en los municipios de mayor crecimiento.
+
+Cada corrida verifica que la suma de los 51 municipios cuadre con el total
+estatal en TODOS los anios censales del archivo. Si un dato se corrompe al
+editarlo, el script falla en vez de generar un SQL con cifras mal.
 
 Uso (desde la raiz del proyecto, despues de build_municipios_inegi.py):
-    python3 datos/scripts/build_regiones_sql.py > datos/postgres/semillas/nl_municipios_completos.sql
+    python3 scripts/build_regiones_sql.py > db/datos/nl_municipios_completos.sql
 """
 import json
 import os
 import sys
+import unicodedata
 
-# Carpeta datos/: este script vive en datos/scripts/.
+# Raiz del proyecto: este script vive en scripts/.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GEO_DIR = os.path.join(BASE_DIR, "geo")
+GEO_DIR = os.path.join(BASE_DIR, "data", "geo")
+CENSO = os.path.join(BASE_DIR, "data", "censo", "nl_poblacion_municipios_1990_2020.tsv")
 
-POBLACION_APROX = {
-    "001": 2600, "002": 3500, "003": 1200, "004": 33000, "005": 19000,
-    "007": 14000, "008": 3300, "009": 100000, "010": 40000, "011": 8300,
-    "012": 50000, "013": 11500, "014": 36000, "015": 1300, "016": 3000,
-    "017": 40000, "020": 5300, "022": 14000, "023": 1400, "024": 4700,
-    "025": 50000, "027": 1500, "028": 1700, "029": 7300, "030": 3300,
-    "032": 5000, "033": 90000, "034": 7500, "035": 1000, "036": 5500,
-    "037": 5600, "038": 76000, "040": 700, "041": 26000, "042": 5900,
-    "043": 2200, "044": 33000, "045": 76000, "047": 16000, "050": 700,
-    "051": 4500,
-}
+ANIO = "2020"
 
+# Los 10 municipios que ya siembra 010_datos_iniciales.sql. La migracion
+# 015 es la que corrige su poblacion; aqui solo se insertan los que faltan.
 YA_EXISTEN = {"006", "018", "019", "021", "026", "031", "039", "046", "048", "049"}
+
+# El tabulado usa el nombre corto; el catalogo oficial, el completo.
+ALIAS = {"carmen": "el carmen"}
+
+
+def normaliza(s):
+    s = unicodedata.normalize("NFKD", s.strip().lower())
+    return " ".join(s.encode("ascii", "ignore").decode("ascii").split())
+
+
+def lee_censo(catalogo):
+    """{clave INEGI de 3 digitos: poblacion} para ANIO, ya validado."""
+    filas = []
+    with open(CENSO, encoding="utf-8") as f:
+        for linea in f:
+            if linea.startswith("#") or not linea.strip():
+                continue
+            filas.append(linea.rstrip("\n").split("\t"))
+
+    municipios = filas[0][2:]
+    por_nombre = {normaliza(v): k for k, v in catalogo.items()}
+    claves = []
+    for nombre in municipios:
+        clave = por_nombre.get(ALIAS.get(normaliza(nombre), normaliza(nombre)))
+        if clave is None:
+            raise SystemExit(f"'{nombre}' no esta en el catalogo oficial de INEGI")
+        claves.append(clave)
+
+    if len(set(claves)) != len(catalogo):
+        raise SystemExit(f"el tabulado trae {len(set(claves))} municipios, "
+                         f"el catalogo {len(catalogo)}")
+
+    def num(x):
+        return int(float(x.replace(",", "")))
+
+    poblacion = {}
+    for fila in filas[1:]:
+        anio, estatal, valores = fila[0], num(fila[1]), [num(v) for v in fila[2:]]
+        # Invariante del dataset: los municipios suman el estado, cada anio.
+        if sum(valores) != estatal:
+            raise SystemExit(f"{anio}: los municipios suman {sum(valores):,} pero el "
+                             f"total estatal es {estatal:,} "
+                             f"(diferencia {estatal - sum(valores):+,})")
+        if anio == ANIO:
+            poblacion = dict(zip(claves, valores))
+
+    if not poblacion:
+        raise SystemExit(f"el tabulado no trae el anio {ANIO}")
+    return poblacion
 
 
 def main():
     sys.stdout.reconfigure(newline="\n")   # LF tambien en Windows
-    centroides = json.load(open(os.path.join(GEO_DIR, "nl_centroides.json")))
-    catalogo = json.load(open(os.path.join(GEO_DIR, "nl_catalogo_oficial.json")))
+    centroides = json.load(open(os.path.join(GEO_DIR, "nl_centroides.json"), encoding="utf-8"))
+    catalogo = json.load(open(os.path.join(GEO_DIR, "nl_catalogo_oficial.json"), encoding="utf-8"))
+    poblacion = lee_censo(catalogo)
 
     lines = []
     lines.append("-- =============================================================================")
     lines.append("-- nl_municipios_completos.sql")
     lines.append("-- Agrega los 41 municipios de Nuevo Leon que no vienen en")
     lines.append("-- 010_datos_iniciales.sql (catalogo INEGI real, geometria real).")
-    lines.append("-- Generado por build_regiones_sql.py: no editar a mano.")
-    lines.append("-- PENDIENTE: la poblacion de estos 41 es aproximada, no es censo")
-    lines.append("-- verificado -- ver docstring de build_regiones_sql.py.")
+    lines.append("-- Generado por scripts/build_regiones_sql.py: no editar a mano.")
+    lines.append(f"-- Poblacion: Censo de Poblacion y Vivienda {ANIO}, INEGI.")
+    lines.append("-- Ver data/censo/nl_poblacion_municipios_1990_2020.tsv para la fuente.")
     lines.append("-- =============================================================================")
     lines.append("")
     lines.append("BEGIN;")
@@ -68,9 +118,8 @@ def main():
             raise SystemExit(f"sin centroide para {cod} {nombre}")
         lat = centroides[region_code]["lat"]
         lon = centroides[region_code]["lon"]
-        pob = POBLACION_APROX[cod]
         nombre_sql = nombre.replace("'", "''")
-        rows.append(f"    ('{region_code}', '{nombre_sql}', {pob}, {lat}, {lon})")
+        rows.append(f"    ('{region_code}', '{nombre_sql}', {poblacion[cod]}, {lat}, {lon})")
 
     lines.append(",\n".join(rows))
     lines.append(") AS v(code, name, pob, lat, lon)")
