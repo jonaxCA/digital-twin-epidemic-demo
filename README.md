@@ -30,6 +30,7 @@ Requiere PostgreSQL 15+ y Python 3.9+. Desde la raíz del repositorio:
 createdb -h localhost -U postgres simulador_epidemico
 psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f datos/postgres/dump_completo.sql
 psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f datos/postgres/semillas/nl_municipios_completos.sql
+psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f datos/postgres/migraciones/018_correccion_poblacion_51_municipios.sql
 psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f datos/postgres/semillas/demo_datos_nl.sql
 
 python3 -m venv .venv && source .venv/bin/activate

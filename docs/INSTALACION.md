@@ -85,12 +85,13 @@ hasta el Paso 3, cuando ya existan las tablas.
 ## Paso 2 — Cargar el esquema y los datos
 
 Desde una terminal, **parado en la carpeta del proyecto** (donde está `app.py`),
-corre los tres archivos **en este orden exacto**:
+corre los archivos **en este orden exacto**:
 
 ```bash
-psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f db/dump_completo.sql
-psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f db/datos/nl_municipios_completos.sql
-psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f db/datos/demo_datos_nl.sql
+psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f datos/postgres/dump_completo.sql
+psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f datos/postgres/semillas/nl_municipios_completos.sql
+psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f datos/postgres/migraciones/018_correccion_poblacion_51_municipios.sql
+psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f datos/postgres/semillas/demo_datos_nl.sql
 ```
 
 En Windows PowerShell es lo mismo, pero anteponiendo la ruta a `psql.exe` si no
@@ -100,16 +101,21 @@ está en el `PATH`.
 
 | Archivo | Qué carga |
 |---|---|
-| `db/dump_completo.sql` | El esquema completo: las 17 migraciones numeradas (001–017) concatenadas |
-| `db/datos/nl_municipios_completos.sql` | Completa los 51 municipios de Nuevo León |
-| `db/datos/demo_datos_nl.sql` | Datos de demostración (sintéticos): 3,824 casos, escenario, simulaciones y la usuaria de login |
+| `datos/postgres/dump_completo.sql` | El esquema completo: las migraciones numeradas (001–017) concatenadas |
+| `datos/postgres/semillas/nl_municipios_completos.sql` | Completa los 51 municipios de Nuevo León (con población aproximada, ver siguiente paso) |
+| `datos/postgres/migraciones/018_correccion_poblacion_51_municipios.sql` | Corrige la población (total y 60+) de los 51 municipios a la cifra del Censo 2020 (issue #49: la semilla anterior por sí sola deja 41 de los 51 con una aproximación, no con el dato censal) |
+| `datos/postgres/semillas/demo_datos_nl.sql` | Datos de demostración (sintéticos): 3,824 casos, escenario, simulaciones y la usuaria de login |
 
-**El orden importa.** Los dos últimos archivos dependen del esquema y del catálogo
-de regiones que carga `dump_completo.sql`.
+**El orden importa.** El paso de corrección de población (`018`) debe ir
+**después** de `nl_municipios_completos.sql`: antes de que esa semilla exista,
+esos 41 municipios no están en la base y no hay nada que corregir.
 
 > **¿Ya tenías la base de una versión anterior?** Vuelve a correr
-> `db/dump_completo.sql`. Es idempotente: lo que ya existe no se duplica y se aplican
-> las migraciones que falten. No hace falta ningún archivo de corrección aparte.
+> `datos/postgres/dump_completo.sql` y, si tu base es anterior al Censo 2020
+> completo, también `datos/postgres/migraciones/018_correccion_poblacion_51_municipios.sql`.
+> Ambos son idempotentes: lo que ya existe no se duplica y se aplican las
+> migraciones que falten. `018` nunca pisa una población que un
+> `ADMINISTRADOR` haya corregido a mano desde la pantalla de Regiones.
 
 `-v ON_ERROR_STOP=1` hace que `psql` se detenga al primer error en vez de seguir
 y dejarte la base a medias. Si un comando termina sin mensajes de `ERROR`, salió bien.

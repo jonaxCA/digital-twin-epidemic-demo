@@ -18,9 +18,15 @@ sin Alembic: se ejecutan en orden y cada uno registra su aplicación en la tabla
 | `008_comentarios.sql` | `COMMENT ON` de las 21 tablas y sus 183 columnas |
 | `009_roles_bd.sql` | Roles de PostgreSQL por microservicio y sus privilegios |
 | `010_datos_iniciales.sql` | Roles de negocio, permisos, matriz de permisos y catálogos |
+| `015_poblacion_censo_2020.sql` | Corrige la población municipal a la cifra del Censo 2020 (INEGI) |
+| `016_poblacion_60mas.sql` | Agrega y llena `regions.population_60plus` (ITER 2020, INEGI) |
+| `018_correccion_poblacion_51_municipios.sql` | Reaplica `015`/`016` a los 51 municipios: corrige un defecto de orden de instalación (issue #49) por el que los 41 municipios de `nl_municipios_completos.sql` quedaban con población aproximada. Debe correr **después** de esa semilla |
 
 El orden importa: `005` referencia catálogos de `004`, y `007` referencia
-escenarios de `006`. No cambien la numeración.
+escenarios de `006`. `018` depende de que ya exista la semilla de los 51
+municipios, así que **no** se incluye en `dump_completo.sql` en la posición
+habitual: se corre aparte, después de `nl_municipios_completos.sql` (ver
+`docs/INSTALACION.md`, Paso 2). No cambien la numeración.
 
 ## Cómo ejecutarlas
 
