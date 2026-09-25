@@ -6,6 +6,7 @@ Responsables de programación de este Sprint:
 
 -- Jonathan Correa Ascencio
 
+-- Carlos Rodrigo Gómez González 
 
 Primera versión funcional del monolito del **Simulador de respuesta a epidemias**,
 correspondiente al Primer Avance.
@@ -84,13 +85,13 @@ hasta el Paso 3, cuando ya existan las tablas.
 
 ## Paso 2 — Cargar el esquema y los datos
 
-Desde una terminal, **parado en la carpeta del proyecto** (donde está `app.py`),
-corre los tres archivos **en este orden exacto**:
+Desde una terminal, **parado en la raíz del repositorio** (donde está el
+`README.md`), corre los tres archivos **en este orden exacto**:
 
 ```bash
-psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f db/dump_completo.sql
-psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f db/datos/nl_municipios_completos.sql
-psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f db/datos/demo_datos_nl.sql
+psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f datos/postgres/dump_completo.sql
+psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f datos/postgres/semillas/nl_municipios_completos.sql
+psql -h localhost -U postgres -d simulador_epidemico -v ON_ERROR_STOP=1 -f datos/postgres/semillas/demo_datos_nl.sql
 ```
 
 En Windows PowerShell es lo mismo, pero anteponiendo la ruta a `psql.exe` si no
@@ -100,16 +101,27 @@ está en el `PATH`.
 
 | Archivo | Qué carga |
 |---|---|
-| `db/dump_completo.sql` | El esquema completo: las 17 migraciones numeradas (001–017) concatenadas |
-| `db/datos/nl_municipios_completos.sql` | Completa los 51 municipios de Nuevo León |
-| `db/datos/demo_datos_nl.sql` | Datos de demostración (sintéticos): 3,824 casos, escenario, simulaciones y la usuaria de login |
+| `datos/postgres/dump_completo.sql` | El esquema completo: las migraciones numeradas concatenadas |
+| `datos/postgres/semillas/nl_municipios_completos.sql` | Completa los 51 municipios de Nuevo León |
+| `datos/postgres/semillas/demo_datos_nl.sql` | Datos de demostración (sintéticos): 3,824 casos, escenario, simulaciones y la usuaria de login |
 
 **El orden importa.** Los dos últimos archivos dependen del esquema y del catálogo
 de regiones que carga `dump_completo.sql`.
 
 > **¿Ya tenías la base de una versión anterior?** Vuelve a correr
-> `db/dump_completo.sql`. Es idempotente: lo que ya existe no se duplica y se aplican
-> las migraciones que falten. No hace falta ningún archivo de corrección aparte.
+> `datos/postgres/dump_completo.sql`. Es idempotente: lo que ya existe no se duplica
+> y se aplican las migraciones que falten.
+
+> **Migraciones que van fuera del dump.** Una migración que depende de una semilla
+> no puede vivir dentro de `dump_completo.sql`, porque el dump corre antes que las
+> semillas. Esas se corren aparte, después del paso de semillas, y están listadas en
+> `datos/scripts/verifica_migraciones.py`. Ese script verifica que cada archivo de
+> `datos/postgres/migraciones/` coincida con su bloque del dump y que las apartadas
+> no estén duplicadas dentro de él:
+>
+> ```bash
+> python datos/scripts/verifica_migraciones.py
+> ```
 
 `-v ON_ERROR_STOP=1` hace que `psql` se detenga al primer error en vez de seguir
 y dejarte la base a medias. Si un comando termina sin mensajes de `ERROR`, salió bien.
@@ -125,11 +137,27 @@ psql -h localhost -U postgres -d simulador_epidemico -c "
   GRANT USAGE ON SCHEMA public TO epidemia_app;
   GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO epidemia_app;
   GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO epidemia_app;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO epidemia_app;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT USAGE, SELECT ON SEQUENCES TO epidemia_app;
 "
 ```
 
 La app necesita `INSERT` y `UPDATE` (no solo lectura) porque el login actualiza
 `users.last_login_at` y la auditoría escribe en `audit_log`.
+
+> **Por qué las dos líneas de `ALTER DEFAULT PRIVILEGES`.** `ON ALL TABLES` otorga
+> permisos sobre las tablas que existen *en ese momento*, no sobre las futuras. Sin
+> esto, la primera migración que agregue una tabla deja a la app sin acceso a ella y
+> la pantalla correspondiente falla con `permiso denegado`, aunque la migración haya
+> corrido sin un solo error. `ALTER DEFAULT PRIVILEGES` aplica a lo que cree de aquí
+> en adelante el mismo rol que ejecuta este comando (`postgres`), que es quien corre
+> las migraciones.
+
+> **¿Ya tenías la base y una pantalla te da `permiso denegado`?** Vuelve a correr el
+> bloque de arriba: el `GRANT ... ON ALL TABLES` alcanza las tablas que se agregaron
+> desde entonces, y el `ALTER DEFAULT PRIVILEGES` evita que vuelva a pasar.
 
 ---
 
@@ -142,7 +170,8 @@ La app necesita `INSERT` y `UPDATE` (no solo lectura) porque el login actualiza
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r frontend_web/requerimientos.txt   # la app web (arrastra backend_web)
+pip install -r procesamiento/requerimientos.txt  # el motor de simulacion
 ```
 
 **Windows (PowerShell):**
@@ -150,7 +179,8 @@ pip install -r requirements.txt
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install -r frontend_web/requerimientos.txt   # la app web (arrastra backend_web)
+pip install -r procesamiento/requerimientos.txt  # el motor de simulacion
 ```
 
 > Si PowerShell bloquea el script de activación, corre una vez:
@@ -181,10 +211,10 @@ JWT_SECRET_KEY=pon-aqui-cualquier-cadena-larga-y-aleatoria
 
 ## Paso 5 — Arrancar la aplicación
 
-Con el entorno virtual activo y en la carpeta del proyecto:
+Con el entorno virtual activo y en la raíz del repositorio:
 
 ```bash
-python app.py
+python -m frontend_web.run
 ```
 
 Verás algo como `Running on http://127.0.0.1:5000`. Abre en tu navegador:
@@ -207,7 +237,7 @@ Para detenerla: `Ctrl + C`.
 > enviar a revisión, aprobar) son parte del siguiente avance, así que hoy ambos
 > usuarios ven lo mismo en la interfaz.
 
-> Las tres contraseñas las pone `db/datos/demo_datos_nl.sql`, así que con los
+> Las tres contraseñas las pone `datos/postgres/semillas/demo_datos_nl.sql`, así que con los
 > tres comandos del Paso 2 ya puedes entrar con cualquiera. No hay archivos
 > extra que correr.
 >
@@ -278,12 +308,12 @@ psql -h localhost -U postgres -d simulador_epidemico -Atc "SELECT 'casos='||coun
 | `password authentication failed for user "postgres"` | Contraseña incorrecta. En Linux puedes reasignarla: `sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'nueva';"` |
 | `Peer authentication failed` (solo Linux) | Estás conectando por socket. Usa siempre `-h localhost`, que fuerza conexión TCP con contraseña. |
 | `FATAL: database "simulador_epidemico" does not exist` | Te faltó el Paso 1, o escribiste otro nombre en el `.env`. |
-| `psycopg2.OperationalError` al arrancar `app.py` | El `DATABASE_URL` del `.env` no coincide con tu base/usuario/contraseña reales. Revisa el Paso 4.2. |
+| `psycopg2.OperationalError` al arrancar la app | El `DATABASE_URL` del `.env` no coincide con tu base/usuario/contraseña reales. Revisa el Paso 4.2. |
 | `permission denied for table ...` | Te faltó el Paso 3 (los `GRANT`), o lo corriste **antes** del Paso 2, cuando las tablas todavía no existían. Vuelve a correrlo. |
 | Todo se ve en **cero** y no puedes entrar | Falta `demo_datos_nl.sql` (Paso 2). Sin él no existe `diana.flores` ni hay casos. |
 | Las **gráficas no aparecen** (el resto sí) | Highcharts se carga desde su CDN: necesitas internet. |
 | `syntax error at or near "NULLS"` al cargar el esquema | Tu PostgreSQL es menor a 15. Actualiza. |
-| El puerto 5000 está ocupado | Cambia el puerto en la última línea de `app.py`, o libera el 5000. En macOS suele ocuparlo *AirPlay Receiver*. |
+| El puerto 5000 está ocupado | Cambia el puerto en la última línea de `frontend_web/run.py`, o libera el 5000. En macOS suele ocuparlo *AirPlay Receiver*. |
 
 ### Volver a empezar de cero
 
@@ -343,7 +373,7 @@ los tres **respetando los filtros que tengas puestos**.
 Para regenerar los datos sintéticos (o ajustar tendencias por municipio):
 
 ```bash
-python scripts/gen_demo_data.py > db/datos/demo_datos_nl.sql
+python datos/scripts/gen_demo_data.py > datos/postgres/semillas/demo_datos_nl.sql
 ```
 
 ## Decisiones que falta validar.
@@ -368,8 +398,8 @@ python scripts/gen_demo_data.py > db/datos/demo_datos_nl.sql
   llevaban aproximaciones de orden de magnitud con errores de hasta 82%
   (Pesquería tenía 26,000 habitantes contra 147,624 reales), lo que inflaba su
   incidencia por 100,000 habitantes hasta seis veces. Ahora salen de
-  `data/censo/nl_poblacion_municipios_1990_2020.tsv`, y
-  `scripts/build_regiones_sql.py` verifica en cada corrida que los 51 municipios
+  `datos/censo/nl_poblacion_municipios_1990_2020.tsv`, y
+  `datos/scripts/build_regiones_sql.py` verifica en cada corrida que los 51 municipios
   sumen el total estatal en los siete años censales. La migración `015` corrige
   las bases que ya existían.
 - **Highcharts Maps para el mapa** (no Leaflet): la materia exige Highcharts, así
@@ -407,15 +437,16 @@ python scripts/gen_demo_data.py > db/datos/demo_datos_nl.sql
 
 ## Motor de simulación
 
-`motor/` es un modelo SEIR estocástico con hospitalizados, fallecidos y vacunados,
+`procesamiento/motor/` es un modelo SEIR estocástico con hospitalizados, fallecidos y vacunados,
 por grupo de edad y reproducible por semilla (`python-ref-0.1`), más el cálculo de
 costo y frontera de Pareto para comparar escenarios. No depende de Flask ni de la
 base, y no trae valores epidemiológicos ni costos por defecto: cada parámetro debe
 venir con su fuente o marcado como supuesto.
 
 ```bash
+cd procesamiento
 python -m motor                              # ejemplo A/B/C/D con frontera de Pareto
-python -m unittest discover -s tests -t .    # pruebas
+python -m unittest discover -s tests -t .    # pruebas del motor
 ```
 
 Los números del ejemplo son **supuestos ilustrativos**, no datos de Nuevo León.
@@ -423,31 +454,38 @@ Los números del ejemplo son **supuestos ilustrativos**, no datos de Nuevo León
 ## Estructura del proyecto
 
 ```
-app.py                       rutas Flask (monolito)
-auth.py                      login, bcrypt, JWT en cookie httponly
-audit.py                     bitacora real: cada login/logout/export escribe en audit_log
-db.py                        conexion a Postgres (lee .env)
-queries.py                   todas las consultas SQL reales
-templates/                   plantillas Jinja2
-static/css/styles.css        estilos
-static/js/nl_municipios.json geometria oficial de los 51 municipios (generado)
+backend_web/db.py            conexion a Postgres (lee .env)
+backend_web/queries.py       todas las consultas SQL reales
+backend_web/auth.py          credenciales: bcrypt y firma del JWT
+backend_web/audit.py         bitacora real: cada login/logout/export escribe en audit_log
+backend_web/tests/           pruebas de las consultas contra PostgreSQL real
 
-motor/                       motor de simulacion de referencia y frontera de Pareto
-tests/                       pruebas del motor
+frontend_web/run.py          arranque de la app Flask
+frontend_web/app/routes.py   rutas Flask
+frontend_web/app/permisos.py sesion por cookie y decoradores de acceso por rol
+frontend_web/app/templates/  plantillas Jinja2
+frontend_web/app/static/css/styles.css        estilos
+frontend_web/app/static/js/nl_municipios.json geometria de los 51 municipios (generado)
+frontend_web/tests/          pruebas de las rutas
 
-db/dump_completo.sql         esquema completo (migraciones 001-012 concatenadas)
-db/migraciones/              migraciones 011 y 012 como archivos individuales
-db/datos/                    cargas: municipios (generado) y datos de demostracion (incluye las 3 cuentas)
+procesamiento/motor/         motor de simulacion de referencia y frontera de Pareto
+procesamiento/tests/         pruebas del motor
 
-scripts/build_municipios_inegi.py  capa municipal de INEGI -> geojson del mapa + centroides
-scripts/build_regiones_sql.py      centroides + catalogo -> db/datos/nl_municipios_completos.sql
-scripts/gen_demo_data.py           generador de los datos de demostracion (semilla fija)
-data/geo/inegi_mg2024/       capa municipal oficial (Marco Geoestadistico 2024, ent. 19)
-data/geo/                    catalogo INEGI y centroides de los 51 municipios
-data/censo/                  poblacion municipal y estructura por edad (Censo 2020, INEGI)
+datos/postgres/dump_completo.sql   esquema completo (migraciones concatenadas)
+datos/postgres/migraciones/        cada migracion como archivo individual
+datos/postgres/semillas/           municipios (generado) y datos de demostracion (incluye las 3 cuentas)
 
-docs/                        plan de trabajo (CHECKLIST_SEGUNDO_AVANCE.md)
-requirements.txt             dependencias de Python
+datos/scripts/build_municipios_inegi.py  capa municipal de INEGI -> geojson del mapa + centroides
+datos/scripts/build_regiones_sql.py      centroides + catalogo -> semillas/nl_municipios_completos.sql
+datos/scripts/gen_demo_data.py           generador de los datos de demostracion (semilla fija)
+datos/scripts/verifica_migraciones.py    comprueba migraciones sueltas contra el dump
+datos/geo/inegi_mg2024/      capa municipal oficial (Marco Geoestadistico 2024, ent. 19)
+datos/geo/                   catalogo INEGI y centroides de los 51 municipios
+datos/censo/                 poblacion municipal y estructura por edad (Censo 2020, INEGI)
+
+docs/                        plan de trabajo (CHECKLIST_SEGUNDO_AVANCE.md) y esta guia
+frontend_web/requerimientos.txt    dependencias de la app web
+procesamiento/requerimientos.txt   dependencias del motor
 .env.example                 plantilla de configuracion (el .env real no se sube)
 .gitignore                   excluye .env, entornos virtuales, caches, respaldos y archivo/
 archivo/                     solo local, ignorado por git: pipeline y fuentes geograficas superadas

@@ -18,6 +18,7 @@ sin Alembic: se ejecutan en orden y cada uno registra su aplicación en la tabla
 | `008_comentarios.sql` | `COMMENT ON` de las 21 tablas y sus 183 columnas |
 | `009_roles_bd.sql` | Roles de PostgreSQL por microservicio y sus privilegios |
 | `010_datos_iniciales.sql` | Roles de negocio, permisos, matriz de permisos y catálogos |
+| `019_correccion_manual_poblacion.sql` | `region_population_adjustments`: ajuste vigente de población hecho a mano por un `ADMINISTRADOR` (Bloque C, catálogo de Regiones) |
 
 El orden importa: `005` referencia catálogos de `004`, y `007` referencia
 escenarios de `006`. No cambien la numeración.

@@ -1634,3 +1634,363 @@ def eliminar_usuario(user_id):
                        "la operacion. Esta base no tiene la migracion 011: "
                        "vuelve a correr db/dump_completo.sql. Mientras tanto, "
                        "usa la baja logica (desactivar).")
+
+
+# ---------------------------------------------------------------------------
+# Catalogo de Regiones (Bloque C) -- Nuevo Leon y sus 51 municipios
+# ---------------------------------------------------------------------------
+# Consulta abierta a cualquier usuario autenticado. La edicion de poblacion
+# (mas abajo) es exclusiva de ADMINISTRADOR -- el candado real vive en la ruta
+# (admin_required), esto solo hace las consultas y la escritura.
+#
+# La fuente que se muestra distingue el dato censal original del ajuste
+# manual: `region_population_adjustments` (019_correccion_manual_poblacion.sql)
+# guarda ese ajuste vigente; si una region+campo no tiene fila ahi, la cifra
+# sigue siendo la del censo (015/016/018).
+
+# Whitelist de columnas ordenables: nunca se interpola la entrada del usuario
+# directamente en el SQL, solo se usa para elegir una de estas dos.
+ORDEN_REGIONES = {
+    "nombre": "r.name",
+    "poblacion": "r.population",
+}
+
+
+def _fuente_campo(reason, adjusted_at, adjusted_by_name, fuente_censal):
+    """Arma el texto de la columna Fuente para un campo (population o
+    population_60plus) de un municipio. Si hay un ajuste manual vigente, se ve
+    distinto a la fuente censal -- nunca se le atribuye a INEGI un valor que un
+    administrador corrigio."""
+    if reason is None:
+        return {"tipo": "censal", "label": fuente_censal, "detalle": None}
+    detalle = f"Corregido por {adjusted_by_name or 'un administrador'} el {_fecha_corta(adjusted_at)}: {reason}"
+    return {"tipo": "manual", "label": "Corrección manual", "detalle": detalle}
+
+
+def get_estado_nl():
+    """Nuevo Leon como fila unica: su poblacion es el agregado de sus 51
+    municipios (ver actualiza_poblacion_municipio), nunca se edita aparte."""
+    row = query(
+        "SELECT id, code, name, population, population_60plus FROM regions WHERE code = %s",
+        (NL_ESTADO_CODE,),
+        one=True,
+    )
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "code": row["code"],
+        "nombre": row["name"],
+        "poblacion": row["population"],
+        "poblacion_60": row["population_60plus"],
+        "fuente_poblacion": {"tipo": "agregado", "label": "Suma de los 51 municipios", "detalle": None},
+        "fuente_poblacion_60": {"tipo": "agregado", "label": "Suma de los 51 municipios", "detalle": None},
+    }
+
+
+def get_regiones_catalogo(busqueda=None, orden="nombre", direccion="asc"):
+    """Los 51 municipios de Nuevo Leon, con su poblacion, poblacion 60+ y
+    fuente. Todo sale de PostgreSQL usando parent_region_id para la
+    jerarquia -- nada de listas ni cifras hardcodeadas aqui.
+
+    `orden` y `direccion` se validan contra listas fijas antes de ir al SQL:
+    nunca se arma la consulta con la entrada del usuario directamente.
+    """
+    columna = ORDEN_REGIONES.get(orden, ORDEN_REGIONES["nombre"])
+    direccion_sql = "DESC" if direccion == "desc" else "ASC"
+
+    condiciones = ["r.parent_region_id = (SELECT id FROM regions WHERE code = %s)"]
+    params = [NL_ESTADO_CODE]
+    if busqueda:
+        condiciones.append("(r.name ILIKE %s OR r.code ILIKE %s)")
+        patron = f"%{busqueda}%"
+        params += [patron, patron]
+    where = " AND ".join(condiciones)
+
+    rows = query(
+        f"""
+        SELECT r.id, r.code, r.name, r.population, r.population_60plus
+        FROM regions r
+        WHERE {where}
+        ORDER BY {columna} {direccion_sql}, r.name ASC
+        """,
+        tuple(params),
+    )
+
+    # Una base existente puede no haber recibido aun 019. La consulta publica
+    # sigue disponible con fuentes censales, sin referenciar una tabla ausente.
+    ajustes = {}
+    tabla = query(
+        "SELECT to_regclass('public.region_population_adjustments') AS nombre",
+        one=True,
+    )
+    if tabla["nombre"] and rows:
+        ajustes_rows = query(
+            """
+            SELECT a.region_id, a.field, a.reason, a.adjusted_at, u.full_name
+            FROM region_population_adjustments a
+            LEFT JOIN users u ON u.id = a.adjusted_by
+            WHERE a.region_id = ANY(%s)
+            """,
+            ([r["id"] for r in rows],),
+        )
+        ajustes = {(a["region_id"], a["field"]): a for a in ajustes_rows}
+
+    municipios = []
+    for r in rows:
+        ajuste_pob = ajustes.get((r["id"], "population"), {})
+        ajuste_60 = ajustes.get((r["id"], "population_60plus"), {})
+        municipios.append({
+            "id": r["id"],
+            "code": r["code"],
+            "nombre": r["name"],
+            "poblacion": r["population"],
+            "poblacion_60": r["population_60plus"],
+            "fuente_poblacion": _fuente_campo(
+                ajuste_pob.get("reason"), ajuste_pob.get("adjusted_at"),
+                ajuste_pob.get("full_name"),
+                "INEGI, Censo 2020"),
+            "fuente_poblacion_60": _fuente_campo(
+                ajuste_60.get("reason"), ajuste_60.get("adjusted_at"),
+                ajuste_60.get("full_name"),
+                "ITER 2020 (INEGI)"),
+        })
+
+    return {
+        "municipios": municipios,
+        "total": len(municipios),
+        "busqueda": busqueda or "",
+        "orden": orden if orden in ORDEN_REGIONES else "nombre",
+        "direccion": direccion if direccion in ("asc", "desc") else "asc",
+    }
+
+
+def get_region_municipio(region_id):
+    """Un municipio de Nuevo Leon para el formulario de edicion de poblacion.
+    None si no existe o si no es un municipio de NL (nivel/padre incorrectos):
+    asi la ruta no depende de confiar en el region_id que llega por la URL."""
+    return query(
+        """
+        SELECT r.id, r.code, r.name, r.level, r.parent_region_id,
+               r.population, r.population_60plus
+        FROM regions r
+        WHERE r.id = %s
+          AND r.level = 'municipio'
+          AND r.parent_region_id = (SELECT id FROM regions WHERE code = %s)
+        """,
+        (region_id, NL_ESTADO_CODE),
+        one=True,
+    )
+
+
+def valida_poblacion_municipio(population_raw, population_60_raw, motivo):
+    """Valida los tres campos del formulario de correccion. Devuelve
+    (population:int|None, population_60:int|None, errores:list). Con errores
+    no vacios, los dos primeros valores no son de fiar -- el llamador debe
+    conservar lo que la persona escribio (no lo que aqui se devuelve) para
+    volver a mostrar el formulario."""
+    errores = []
+
+    def _entero_no_negativo(valor, etiqueta):
+        if valor is None or str(valor).strip() == "":
+            errores.append(f"{etiqueta} es obligatoria.")
+            return None
+        try:
+            n = int(str(valor).strip())
+        except ValueError:
+            errores.append(f"{etiqueta} debe ser un número entero.")
+            return None
+        if n < 0:
+            errores.append(f"{etiqueta} no puede ser negativa.")
+            return None
+        return n
+
+    poblacion = _entero_no_negativo(population_raw, "La población total")
+    poblacion_60 = _entero_no_negativo(population_60_raw, "La población de 60 años o más")
+
+    if poblacion is not None and poblacion_60 is not None and poblacion_60 > poblacion:
+        errores.append("La población de 60 años o más no puede ser mayor que la población total.")
+
+    if not motivo or not motivo.strip():
+        errores.append("Indica la fuente o el motivo de la corrección.")
+    elif len(motivo.strip()) > 500:
+        errores.append("La fuente o motivo no puede pasar de 500 caracteres.")
+
+    return poblacion, poblacion_60, errores
+
+
+def actualiza_poblacion_municipio(region_id, population, population_60plus, motivo,
+                                  admin_user_id, esperado_population, esperado_population_60plus):
+    """Corrige la poblacion de un municipio. Solo la debe llamar una ruta ya
+    protegida con admin_required -- aqui no se vuelve a checar el rol.
+
+    Todo corre en UNA transaccion: el UPDATE de regions, el ajuste vigente en
+    region_population_adjustments, el recalculo del agregado estatal y las
+    entradas de audit_log se confirman juntos o no se confirma nada. Asi nunca
+    queda una poblacion cambiada sin su registro de auditoria.
+
+    Control de concurrencia optimista: `esperado_population` /
+    `esperado_population_60plus` son los valores que el formulario tenia al
+    abrirse. Si ya no coinciden con lo que hay en la base (alguien mas corrigio
+    el municipio mientras se llenaba el formulario), se rechaza el guardado en
+    vez de sobreescribirlo en silencio.
+
+    Devuelve (ok, error, resultado). `resultado` trae el antes/despues del
+    municipio y, si aplico, del estado -- para el mensaje de confirmacion.
+    """
+    from flask import request
+
+    from .audit import _serializa
+
+    ip = request.remote_addr
+    ua = (request.headers.get("User-Agent") or "")[:255]
+
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT id, name, level, parent_region_id, population, population_60plus
+                       FROM regions WHERE id = %s FOR UPDATE""",
+                    (region_id,),
+                )
+                fila = cur.fetchone()
+                if not fila or fila[2] != "municipio":
+                    return False, "Ese municipio ya no existe en el catálogo.", None
+                _, nombre, _nivel, padre_id, pob_actual, pob60_actual = fila
+
+                if pob_actual != esperado_population or pob60_actual != esperado_population_60plus:
+                    return False, (
+                        "Otra persona corrigió este municipio mientras editabas el "
+                        "formulario. Recarga la página y vuelve a intentarlo."
+                    ), None
+
+                antes_municipio = {
+                    "id": region_id, "name": nombre,
+                    "population": pob_actual, "population_60plus": pob60_actual,
+                }
+
+                cur.execute(
+                    "UPDATE regions SET population = %s, population_60plus = %s WHERE id = %s",
+                    (population, population_60plus, region_id),
+                )
+
+                for campo, valor_antes, valor_nuevo in (
+                    ("population", pob_actual, population),
+                    ("population_60plus", pob60_actual, population_60plus),
+                ):
+                    if valor_antes == valor_nuevo:
+                        continue
+                    cur.execute(
+                        """
+                        INSERT INTO region_population_adjustments
+                            (region_id, field, census_value, previous_value, new_value,
+                             reason, adjusted_by, adjusted_at)
+                        VALUES (%s, %s,
+                                COALESCE((SELECT census_value FROM region_population_adjustments
+                                          WHERE region_id = %s AND field = %s), %s),
+                                %s, %s, %s, %s, now())
+                        ON CONFLICT (region_id, field) DO UPDATE
+                        SET previous_value = region_population_adjustments.new_value,
+                            new_value       = EXCLUDED.new_value,
+                            reason          = EXCLUDED.reason,
+                            adjusted_by     = EXCLUDED.adjusted_by,
+                            adjusted_at     = now()
+                        """,
+                        (region_id, campo, region_id, campo, valor_antes,
+                         valor_antes, valor_nuevo, motivo.strip(), admin_user_id),
+                    )
+
+                cur.execute(
+                    """
+                    INSERT INTO audit_log (user_id, action, entity_type, entity_id,
+                                           ip_address, user_agent, data_before, data_after)
+                    VALUES (%s, 'UPDATE', 'regions', %s, %s::inet, %s, %s::jsonb, %s::jsonb)
+                    """,
+                    (
+                        admin_user_id, str(region_id), ip, ua,
+                        _serializa(antes_municipio),
+                        _serializa({
+                            "id": region_id, "name": nombre,
+                            "population": population, "population_60plus": population_60plus,
+                            "fuente_motivo": motivo.strip(),
+                        }),
+                    ),
+                )
+
+                cur.execute(
+                    "SELECT id, population, population_60plus FROM regions WHERE id = %s FOR UPDATE",
+                    (padre_id,),
+                )
+                estado_antes_row = cur.fetchone()
+
+                # sum() ignora los NULL, asi que si a un municipio le falta el dato
+                # el agregado saldria mas bajo que el real y quedaria guardado como
+                # si fuera el total del estado. Se cuentan los faltantes y ese campo
+                # simplemente no se recalcula: mejor dejar la cifra anterior que
+                # publicar una suma incompleta.
+                cur.execute(
+                    """
+                    UPDATE regions e
+                    SET population = CASE WHEN sub.faltan_pob = 0
+                                          THEN sub.total_pob ELSE e.population END,
+                        population_60plus = CASE WHEN sub.faltan_60 = 0
+                                                 THEN sub.total_60 ELSE e.population_60plus END
+                    FROM (
+                        SELECT sum(population) AS total_pob,
+                               sum(population_60plus) AS total_60,
+                               count(*) FILTER (WHERE population IS NULL) AS faltan_pob,
+                               count(*) FILTER (WHERE population_60plus IS NULL) AS faltan_60
+                        FROM regions WHERE parent_region_id = %s
+                    ) sub
+                    WHERE e.id = %s
+                    RETURNING e.population, e.population_60plus,
+                              sub.faltan_pob, sub.faltan_60
+                    """,
+                    (padre_id, padre_id),
+                )
+                estado_despues_row = cur.fetchone()
+                faltan_pob = estado_despues_row[2] if estado_despues_row else 0
+                faltan_60 = estado_despues_row[3] if estado_despues_row else 0
+
+                estado_cambio = (
+                    estado_antes_row is not None and estado_despues_row is not None
+                    and (estado_antes_row[1] != estado_despues_row[0]
+                         or estado_antes_row[2] != estado_despues_row[1])
+                )
+                if estado_cambio:
+                    cur.execute(
+                        """
+                        INSERT INTO audit_log (user_id, action, entity_type, entity_id,
+                                               ip_address, user_agent, data_before, data_after)
+                        VALUES (%s, 'UPDATE', 'regions', %s, %s::inet, %s, %s::jsonb, %s::jsonb)
+                        """,
+                        (
+                            admin_user_id, str(padre_id), ip, ua,
+                            _serializa({
+                                "population": estado_antes_row[1],
+                                "population_60plus": estado_antes_row[2],
+                                "nota": "agregado de los 51 municipios de Nuevo León",
+                            }),
+                            _serializa({
+                                "population": estado_despues_row[0],
+                                "population_60plus": estado_despues_row[1],
+                                "nota": f"recalculado tras corregir {nombre}",
+                            }),
+                        ),
+                    )
+            conn.commit()
+        return True, None, {
+            "municipio": nombre,
+            "poblacion_antes": pob_actual, "poblacion_despues": population,
+            "poblacion_60_antes": pob60_actual, "poblacion_60_despues": population_60plus,
+            "estado_actualizado": estado_cambio,
+            "municipios_sin_poblacion": faltan_pob,
+            "municipios_sin_60": faltan_60,
+        }
+    except psycopg2.errors.UndefinedTable:
+        return False, (
+            "La edición requiere la migración 019_correccion_manual_poblacion.sql. "
+            "Pide a la persona responsable de la base que la aplique."
+        ), None
+    except psycopg2.errors.CheckViolation:
+        return False, "Los datos no cumplen las restricciones de la base.", None

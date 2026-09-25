@@ -985,6 +985,7 @@ a { color: inherit; text-decoration: none; }
 }
 .alert-ok    { background: var(--estable-bg); color: var(--estable-text); border-color: var(--estable-border); }
 .alert-error { background: var(--critico-bg); color: var(--critico-text); border-color: var(--critico-border); }
+.alert-warn  { background: var(--alerta-bg); color: var(--alerta-text); border-color: var(--alerta-border); }
 .alert ul { margin: 0; padding-left: 18px; }
 
 .col-acciones { white-space: nowrap; }
@@ -1142,3 +1143,48 @@ a { color: inherit; text-decoration: none; }
 /* El boton de baja/alta logica va en un <form> propio dentro de la celda de
    acciones; sin esto rompe la fila en dos renglones. */
 .form-inline { display: inline; }
+
+/* -------------------------------------------------------------- regiones */
+.orden-link {
+  color: inherit;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.orden-link:hover { color: var(--accent-blue); }
+.orden-link .orden-flecha { font-size: 10px; color: var(--accent-blue); }
+
+.fuente-pill {
+  border-radius: 6px;
+  font-weight: 600;
+  white-space: normal;
+  display: inline-block;
+}
+.fuente-censal { background: #f1f5f9; color: #64748b; }
+.fuente-manual { background: var(--alerta-bg); color: var(--alerta-text); }
+.fuente-agregado { background: var(--estable-bg); color: var(--estable-text); }
+
+.fuente-celda { display: flex; flex-direction: column; gap: 4px; white-space: normal; }
+.fuente-celda .fuente-etiqueta { font-size: 11px; color: var(--text-secondary); }
+
+.estado-resumen {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  background: #f2f4f6;
+}
+.estado-resumen .estado-nombre { font-size: 15px; font-weight: 700; }
+.estado-resumen .estado-clave { font-size: 12.5px; color: var(--text-secondary); }
+.estado-resumen .estado-cifras { display: flex; gap: 28px; }
+.estado-resumen .estado-cifra-valor { font-size: 20px; font-weight: 700; }
+.estado-resumen .estado-cifra-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.03em; }
+
+@media (max-width: 700px) {
+  .estado-resumen { flex-direction: column; align-items: flex-start; }
+  .estado-resumen .estado-cifras { gap: 18px; }
+}

@@ -1,0 +1,126 @@
+{% extends "base_app.html" %}
+{% block title %}Regiones{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Regiones</h1>
+    <p class="subtitle">Nuevo León y sus 51 municipios, con población total, población de 60 años o más y su fuente.</p>
+  </div>
+</div>
+
+{% with mensajes = get_flashed_messages(with_categories=true) %}
+  {% for categoria, mensaje in mensajes %}
+  {# 'warn' avisa de un agregado que no se pudo recalcular: no es un fallo,
+     pero pintarlo de verde como un exito ocultaria justo lo que hay que ver. #}
+  <div class="alert alert-{{ categoria if categoria in ('error', 'warn') else 'ok' }}">{{ mensaje }}</div>
+  {% endfor %}
+{% endwith %}
+
+{% if estado %}
+<div class="card estado-resumen">
+  <div>
+    <div class="estado-nombre">{{ estado.nombre }}</div>
+    <div class="estado-clave">Clave INEGI <code class="codigo-chip">{{ estado.code }}</code> · Estado</div>
+  </div>
+  <div class="estado-cifras">
+    <div>
+      <div class="estado-cifra-valor">{{ "{:,}".format(estado.poblacion) if estado.poblacion is not none else "—" }}</div>
+      <div class="estado-cifra-label">Población total</div>
+    </div>
+    <div>
+      <div class="estado-cifra-valor">{{ "{:,}".format(estado.poblacion_60) if estado.poblacion_60 is not none else "—" }}</div>
+      <div class="estado-cifra-label">Población 60+</div>
+    </div>
+    <div>
+      <span class="badge fuente-pill fuente-agregado">{{ estado.fuente_poblacion.label }}</span>
+      <div class="estado-cifra-label">Fuente</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<form class="card filtros-card" method="get" action="{{ url_for('main.regiones') }}">
+  <div class="field">
+    <label for="q">Búsqueda</label>
+    <input type="search" name="q" id="q" value="{{ catalogo.busqueda }}"
+           placeholder="Buscar municipio por nombre o clave INEGI..." />
+  </div>
+  <input type="hidden" name="orden" value="{{ catalogo.orden }}">
+  <input type="hidden" name="dir" value="{{ catalogo.direccion }}">
+  <div class="filtro-acciones">
+    <a class="btn" href="{{ url_for('main.regiones') }}">Limpiar</a>
+    <button type="submit" class="btn btn-primary">Aplicar</button>
+  </div>
+</form>
+
+<div class="card">
+  <div class="card-header">
+    <div>
+      <h3>Municipios de Nuevo León</h3>
+      <p class="subtitle">51 municipios. Las cifras salen directo de PostgreSQL; una corrección manual se marca como tal en la columna Fuente.</p>
+    </div>
+  </div>
+
+  <div class="tabla-scroll">
+    <table class="situacion-table catalogo-table">
+      <thead>
+        <tr>
+          <th>Clave INEGI</th>
+          <th>
+            <a class="orden-link" href="{{ url_for('main.regiones', q=catalogo.busqueda or None, orden='nombre', dir=('desc' if (catalogo.orden == 'nombre' and catalogo.direccion == 'asc') else 'asc')) }}">
+              Municipio
+              {% if catalogo.orden == 'nombre' %}<span class="orden-flecha">{{ '▲' if catalogo.direccion == 'asc' else '▼' }}</span>{% endif %}
+            </a>
+          </th>
+          <th>
+            <a class="orden-link" href="{{ url_for('main.regiones', q=catalogo.busqueda or None, orden='poblacion', dir=('desc' if (catalogo.orden == 'poblacion' and catalogo.direccion == 'asc') else 'asc')) }}">
+              Población total
+              {% if catalogo.orden == 'poblacion' %}<span class="orden-flecha">{{ '▲' if catalogo.direccion == 'asc' else '▼' }}</span>{% endif %}
+            </a>
+          </th>
+          <th>Población 60+</th>
+          <th>Fuente</th>
+          {% if es_admin %}<th class="col-acciones">Acciones</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in catalogo.municipios %}
+        <tr>
+          <td><code class="codigo-chip">{{ m.code }}</code></td>
+          <td class="celda-nombre">{{ m.nombre }}</td>
+          <td>{{ "{:,}".format(m.poblacion) if m.poblacion is not none else "—" }}</td>
+          <td>{{ "{:,}".format(m.poblacion_60) if m.poblacion_60 is not none else "—" }}</td>
+          <td>
+            <div class="fuente-celda">
+              <span class="badge fuente-pill {{ 'fuente-manual' if m.fuente_poblacion.tipo == 'manual' else 'fuente-censal' }}"
+                    title="{{ m.fuente_poblacion.detalle or '' }}">Población: {{ m.fuente_poblacion.label }}</span>
+              <span class="badge fuente-pill {{ 'fuente-manual' if m.fuente_poblacion_60.tipo == 'manual' else 'fuente-censal' }}"
+                    title="{{ m.fuente_poblacion_60.detalle or '' }}">60+: {{ m.fuente_poblacion_60.label }}</span>
+            </div>
+          </td>
+          {% if es_admin %}
+          <td class="col-acciones">
+            <a class="btn-detalle" href="{{ url_for('main.region_editar', region_id=m.id) }}" title="Corregir población">✎</a>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="{{ 6 if es_admin else 5 }}" class="tabla-vacia">
+            {% if catalogo.busqueda %}
+            No hay municipios que coincidan con «{{ catalogo.busqueda }}».
+            {% else %}
+            No hay municipios registrados.
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tabla-footer">
+    <span class="tabla-conteo">{{ catalogo.total }} municipio{{ 's' if catalogo.total != 1 }}{{ ' encontrado' if catalogo.busqueda else '' }}{{ 's' if catalogo.busqueda and catalogo.total != 1 }}</span>
+  </div>
+</div>
+{% endblock %}
