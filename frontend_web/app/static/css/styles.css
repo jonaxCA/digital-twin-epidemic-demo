@@ -985,6 +985,7 @@ a { color: inherit; text-decoration: none; }
 }
 .alert-ok    { background: var(--estable-bg); color: var(--estable-text); border-color: var(--estable-border); }
 .alert-error { background: var(--critico-bg); color: var(--critico-text); border-color: var(--critico-border); }
+.alert-warn  { background: var(--alerta-bg); color: var(--alerta-text); border-color: var(--alerta-border); }
 .alert ul { margin: 0; padding-left: 18px; }
 
 .col-acciones { white-space: nowrap; }

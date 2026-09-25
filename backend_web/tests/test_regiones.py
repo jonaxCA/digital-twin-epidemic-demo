@@ -29,6 +29,44 @@ def _admin_id():
     return row["id"] if row else None
 
 
+def _restaura(sql, params=()):
+    """Restaura estado en su PROPIA transaccion, sin dejar que un fallo tumbe el
+    resto de la limpieza.
+
+    Un tearDown que corre todo en una sola transaccion pierde la restauracion
+    ENTERA si una sola sentencia falla -- y deja municipios en NULL que rompen
+    las pruebas de la corrida siguiente, con un error que no tiene nada que ver
+    con la causa real. Paso exactamente eso cuando faltaba el GRANT sobre
+    region_population_adjustments.
+    """
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+            conn.commit()
+    except Exception as exc:  # limpieza best-effort: se reporta y se sigue
+        print(f"[tearDown] no se pudo restaurar: {exc}")
+
+
+def _restaura_estado():
+    """Recalcula el agregado de Nuevo Leon saltandose el campo incompleto, igual
+    que produccion: con un municipio en NULL, sum() daria un total mas bajo que
+    el real y lo dejaria guardado como si fuera bueno."""
+    _restaura(
+        """
+        UPDATE regions e
+        SET population = sub.total_pob,
+            population_60plus = CASE WHEN sub.faltan = 0
+                                     THEN sub.total_60 ELSE e.population_60plus END
+        FROM (SELECT sum(population) AS total_pob,
+                     sum(population_60plus) AS total_60,
+                     count(*) FILTER (WHERE population_60plus IS NULL) AS faltan
+              FROM regions
+              WHERE parent_region_id = (SELECT id FROM regions WHERE code = '19')) sub
+        WHERE e.code = '19'
+        """)
+
+
 class _FakeRequest:
     """Sustituye a flask.request dentro de queries.py sin levantar la app:
     actualiza_poblacion_municipio solo necesita remote_addr y headers."""
@@ -128,27 +166,17 @@ class ActualizaPoblacionMunicipioTests(unittest.TestCase):
         self.pob60_original = municipio["population_60plus"]
 
     def tearDown(self):
-        # Deja el municipio y el estado como estaban antes de la prueba.
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE regions SET population = %s, population_60plus = %s WHERE id = %s",
-                    (self.pob_original, self.pob60_original, self.region_id),
-                )
-                cur.execute(
-                    "DELETE FROM region_population_adjustments WHERE region_id = %s",
-                    (self.region_id,),
-                )
-                cur.execute("SELECT id FROM regions WHERE code = '19'")
-                estado_id = cur.fetchone()[0]
-                cur.execute(
-                    """UPDATE regions e SET population = sub.total_pob, population_60plus = sub.total_60
-                       FROM (SELECT sum(population) AS total_pob, sum(population_60plus) AS total_60
-                             FROM regions WHERE parent_region_id = %s) sub
-                       WHERE e.id = %s""",
-                    (estado_id, estado_id),
-                )
-            conn.commit()
+        # Deja el municipio y el estado como estaban antes de la prueba. Cada
+        # sentencia va aparte: ver _restaura.
+        import flask
+        flask.request = self._flask_request_orig  # type: ignore[assignment]
+        _restaura(
+            "UPDATE regions SET population = %s, population_60plus = %s WHERE id = %s",
+            (self.pob_original, self.pob60_original, self.region_id))
+        _restaura(
+            "DELETE FROM region_population_adjustments WHERE region_id = %s",
+            (self.region_id,))
+        _restaura_estado()
 
     def _patch_flask_request(self):
         import backend_web.queries as qmod
@@ -249,6 +277,103 @@ class ActualizaPoblacionMunicipioTests(unittest.TestCase):
 
         fila = query("SELECT population FROM regions WHERE id = %s", (self.region_id,), one=True)
         self.assertEqual(fila["population"], 999999)
+
+
+class PoblacionSinDatoTests(unittest.TestCase):
+    """Un municipio puede llegar con `population_60plus` en NULL: la columna es
+    opcional y las correcciones censales masivas solo alcanzan a las filas que
+    ya existen cuando corren. Estas pruebas fijan que ese estado no rompa la
+    edicion ni corrompa el total del estado."""
+
+    def setUp(self):
+        self._flask_request_orig = None
+        import flask
+        self._flask_request_orig = flask.request
+        flask.request = _FakeRequest()  # type: ignore[assignment]
+
+        self.admin_id = _admin_id()
+        self.assertIsNotNone(self.admin_id, "seed de datos de demo no cargada (falta admin)")
+
+        # Cerralvo (el que se edita) y Villaldama (el que se deja sin dato).
+        self.objetivo = query(
+            "SELECT id, population, population_60plus FROM regions WHERE code = '19011'",
+            one=True)
+        self.vecino = query(
+            "SELECT id, population, population_60plus FROM regions WHERE code = '19051'",
+            one=True)
+        self.estado_id = query("SELECT id FROM regions WHERE code = '19'", one=True)["id"]
+
+    def tearDown(self):
+        import flask
+        flask.request = self._flask_request_orig  # type: ignore[assignment]
+        for fila in (self.objetivo, self.vecino):
+            _restaura(
+                "UPDATE regions SET population = %s, population_60plus = %s WHERE id = %s",
+                (fila["population"], fila["population_60plus"], fila["id"]))
+            _restaura(
+                "DELETE FROM region_population_adjustments WHERE region_id = %s",
+                (fila["id"],))
+        _restaura_estado()
+
+    def _vacia_60(self, region_id):
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE regions SET population_60plus = NULL WHERE id = %s", (region_id,))
+            conn.commit()
+
+    def test_se_puede_capturar_el_60_cuando_estaba_vacio(self):
+        """Antes esto era imposible: el valor esperado llegaba como None y la
+        ruta lo trataba como formulario invalido, dejando el municipio sin
+        forma de corregirse."""
+        self._vacia_60(self.objetivo["id"])
+
+        ok, error, resultado = queries.actualiza_poblacion_municipio(
+            self.objetivo["id"], self.objetivo["population"], 1207,
+            "Captura inicial desde ITER 2020", self.admin_id,
+            self.objetivo["population"], None,   # <- lo que el formulario traia: vacio
+        )
+        self.assertTrue(ok, error)
+
+        fila = query("SELECT population_60plus FROM regions WHERE id = %s",
+                     (self.objetivo["id"],), one=True)
+        self.assertEqual(fila["population_60plus"], 1207)
+
+        ajuste = query(
+            """SELECT census_value, previous_value, new_value
+               FROM region_population_adjustments
+               WHERE region_id = %s AND field = 'population_60plus'""",
+            (self.objetivo["id"],), one=True)
+        self.assertIsNotNone(ajuste, "no quedo registrado el ajuste manual")
+        self.assertEqual(ajuste["new_value"], 1207)
+        # No habia cifra censal previa: decir que era 0 seria inventarla.
+        self.assertIsNone(ajuste["census_value"])
+        self.assertIsNone(ajuste["previous_value"])
+
+    def test_el_total_del_estado_no_se_recalcula_con_un_municipio_sin_dato(self):
+        """sum() ignora los NULL. Si se recalculara igual, Nuevo Leon quedaria
+        con un total mas bajo que el real y guardado como si fuera el bueno."""
+        self._vacia_60(self.vecino["id"])
+        estado_antes = query(
+            "SELECT population, population_60plus FROM regions WHERE id = %s",
+            (self.estado_id,), one=True)
+
+        ok, error, resultado = queries.actualiza_poblacion_municipio(
+            self.objetivo["id"], self.objetivo["population"] + 100,
+            self.objetivo["population_60plus"], "Conteo intercensal 2025",
+            self.admin_id, self.objetivo["population"], self.objetivo["population_60plus"],
+        )
+        self.assertTrue(ok, error)
+        self.assertGreaterEqual(resultado["municipios_sin_60"], 1)
+
+        estado_despues = query(
+            "SELECT population, population_60plus FROM regions WHERE id = %s",
+            (self.estado_id,), one=True)
+        # El de 60+ se queda como estaba; el total si se recalcula, porque ahi
+        # no falta ningun dato.
+        self.assertEqual(estado_despues["population_60plus"],
+                         estado_antes["population_60plus"])
+        self.assertEqual(estado_despues["population"], estado_antes["population"] + 100)
 
 
 if __name__ == "__main__":

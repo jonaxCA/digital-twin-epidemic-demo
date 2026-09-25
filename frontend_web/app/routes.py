@@ -452,6 +452,32 @@ def regiones():
     )
 
 
+def _esperado(nombre):
+    """Lee uno de los campos ocultos con el valor que el formulario traia al
+    abrirse, para el control de concurrencia.
+
+    Devuelve (valor, valido). Hay que distinguir tres casos, porque colapsarlos
+    en "None = invalido" dejaba sin editar a todo municipio con la columna en
+    NULL: el formulario se rechazaba siempre y el mensaje pedia recargar, lo
+    que no arreglaba nada.
+
+      - campo ausente o con basura -> (None, False): el POST no viene de
+        nuestro formulario, o llego incompleto.
+      - campo presente y vacio     -> (None, True): la columna estaba en NULL,
+        que es un estado legitimo.
+      - campo con un entero        -> (int, True).
+    """
+    if nombre not in request.form:
+        return None, False
+    crudo = request.form[nombre].strip()
+    if crudo == "":
+        return None, True
+    try:
+        return int(crudo), True
+    except ValueError:
+        return None, False
+
+
 @bp.route("/regiones/<int:region_id>/editar", methods=["GET", "POST"])
 @admin_required(entity_type="regions")
 def region_editar(region_id):
@@ -476,13 +502,13 @@ def region_editar(region_id):
     population_raw = request.form.get("population")
     population_60_raw = request.form.get("population_60plus")
     motivo = request.form.get("motivo") or ""
-    esperado_population = request.form.get("esperado_population", type=int)
-    esperado_population_60plus = request.form.get("esperado_population_60plus", type=int)
+    esperado_population, ok_pob = _esperado("esperado_population")
+    esperado_population_60plus, ok_60 = _esperado("esperado_population_60plus")
     valores = {"population": population_raw, "population_60plus": population_60_raw, "motivo": motivo}
 
     poblacion, poblacion_60, errores = queries.valida_poblacion_municipio(
         population_raw, population_60_raw, motivo)
-    if esperado_population is None or esperado_population_60plus is None:
+    if not ok_pob or not ok_60:
         errores.append("No se pudo verificar el estado del formulario. Recarga la página e intenta de nuevo.")
 
     if errores:
@@ -501,6 +527,18 @@ def region_editar(region_id):
     if resultado["estado_actualizado"]:
         mensaje += " El total de Nuevo León se recalculó con la suma de sus 51 municipios."
     flash(mensaje, "ok")
+
+    # Si a algun municipio le falta el dato, el total del estado se queda como
+    # estaba: sumarlo daria una cifra mas baja que la real y se veria como si
+    # fuera el total verdadero. Se avisa en vez de publicar una suma incompleta.
+    for faltan, que in ((resultado["municipios_sin_poblacion"], "población total"),
+                        (resultado["municipios_sin_60"], "población de 60 años o más")):
+        if faltan:
+            flash(
+                f"El total de {que} de Nuevo León no se recalculó: "
+                f"{faltan} municipio(s) no tienen ese dato capturado.",
+                "warn",
+            )
     return redirect(url_for("main.regiones"))
 
 

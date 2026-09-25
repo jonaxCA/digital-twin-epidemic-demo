@@ -1,13 +1,13 @@
 """
-Genera db/datos/nl_municipios_completos.sql: agrega a la tabla `regions` los 41
+Genera datos/postgres/semillas/nl_municipios_completos.sql: agrega a la tabla `regions` los 41
 municipios de Nuevo Leon que no vienen en 010_datos_iniciales.sql.
 
 Entradas:
-  - data/censo/nl_poblacion_municipios_1990_2020.tsv  poblacion oficial (INEGI,
+  - datos/censo/nl_poblacion_municipios_1990_2020.tsv poblacion oficial (INEGI,
     censos 1990-2020). Ver el encabezado del archivo para la fuente exacta.
-  - data/geo/nl_centroides.json       centroides calculados sobre la geometria
-    oficial; lo genera scripts/build_municipios_inegi.py
-  - data/geo/nl_catalogo_oficial.json catalogo INEGI de clave -> nombre
+  - datos/geo/nl_centroides.json       centroides calculados sobre la geometria
+    oficial; lo genera datos/scripts/build_municipios_inegi.py
+  - datos/geo/nl_catalogo_oficial.json catalogo INEGI de clave -> nombre
 
 La poblacion ya NO es aproximada: sale del censo. Antes estos 41 municipios
 llevaban cifras de orden de magnitud, con errores de hasta 82% (Pesqueria tenia
@@ -19,17 +19,18 @@ estatal en TODOS los anios censales del archivo. Si un dato se corrompe al
 editarlo, el script falla en vez de generar un SQL con cifras mal.
 
 Uso (desde la raiz del proyecto, despues de build_municipios_inegi.py):
-    python3 scripts/build_regiones_sql.py > db/datos/nl_municipios_completos.sql
+    python3 datos/scripts/build_regiones_sql.py \n        > datos/postgres/semillas/nl_municipios_completos.sql
 """
 import json
 import os
 import sys
 import unicodedata
 
-# Raiz del proyecto: este script vive en scripts/.
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GEO_DIR = os.path.join(BASE_DIR, "data", "geo")
-CENSO = os.path.join(BASE_DIR, "data", "censo", "nl_poblacion_municipios_1990_2020.tsv")
+# Carpeta de datos: este script vive en datos/scripts/, y tanto la geometria
+# como el censo cuelgan de datos/ (no de la raiz del repositorio).
+DATOS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+GEO_DIR = os.path.join(DATOS_DIR, "geo")
+CENSO = os.path.join(DATOS_DIR, "censo", "nl_poblacion_municipios_1990_2020.tsv")
 
 ANIO = "2020"
 

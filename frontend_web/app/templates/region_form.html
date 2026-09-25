@@ -19,20 +19,33 @@
 
 <div class="card form-card">
   <form method="post">
-    <input type="hidden" name="esperado_population" value="{{ municipio.population }}">
-    <input type="hidden" name="esperado_population_60plus" value="{{ municipio.population_60plus }}">
+    {# Vacio = la columna esta en NULL. No se puede usar |default: 0 es un
+       valor legitimo y se perderia. Tampoco se puede imprimir None: volveria
+       como el texto "None" y la ruta no podria verificar el formulario. #}
+    <input type="hidden" name="esperado_population"
+           value="{{ municipio.population if municipio.population is not none else '' }}">
+    <input type="hidden" name="esperado_population_60plus"
+           value="{{ municipio.population_60plus if municipio.population_60plus is not none else '' }}">
+
+    {% if municipio.population_60plus is none %}
+    <p class="field-hint">
+      Este municipio no tiene capturada la población de 60 años o más. Al guardar,
+      el valor que escribas queda registrado como corrección manual, no como dato
+      del censo.
+    </p>
+    {% endif %}
 
     <div class="field">
       <label for="population">Población total <span class="req">*</span></label>
       <input type="number" id="population" name="population" min="0" step="1" required
-             value="{{ valores.population }}">
+             value="{{ valores.population if valores.population is not none else '' }}">
       <p class="field-hint">Entero, mayor o igual a cero.</p>
     </div>
 
     <div class="field">
       <label for="population_60plus">Población de 60 años o más <span class="req">*</span></label>
       <input type="number" id="population_60plus" name="population_60plus" min="0" step="1" required
-             value="{{ valores.population_60plus }}">
+             value="{{ valores.population_60plus if valores.population_60plus is not none else '' }}">
       <p class="field-hint">No puede ser mayor que la población total.</p>
     </div>
 

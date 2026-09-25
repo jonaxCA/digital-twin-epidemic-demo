@@ -1923,22 +1923,34 @@ def actualiza_poblacion_municipio(region_id, population, population_60plus, moti
                 )
                 estado_antes_row = cur.fetchone()
 
+                # sum() ignora los NULL, asi que si a un municipio le falta el dato
+                # el agregado saldria mas bajo que el real y quedaria guardado como
+                # si fuera el total del estado. Se cuentan los faltantes y ese campo
+                # simplemente no se recalcula: mejor dejar la cifra anterior que
+                # publicar una suma incompleta.
                 cur.execute(
                     """
                     UPDATE regions e
-                    SET population = sub.total_pob,
-                        population_60plus = sub.total_60
+                    SET population = CASE WHEN sub.faltan_pob = 0
+                                          THEN sub.total_pob ELSE e.population END,
+                        population_60plus = CASE WHEN sub.faltan_60 = 0
+                                                 THEN sub.total_60 ELSE e.population_60plus END
                     FROM (
                         SELECT sum(population) AS total_pob,
-                               sum(population_60plus) AS total_60
+                               sum(population_60plus) AS total_60,
+                               count(*) FILTER (WHERE population IS NULL) AS faltan_pob,
+                               count(*) FILTER (WHERE population_60plus IS NULL) AS faltan_60
                         FROM regions WHERE parent_region_id = %s
                     ) sub
                     WHERE e.id = %s
-                    RETURNING e.population, e.population_60plus
+                    RETURNING e.population, e.population_60plus,
+                              sub.faltan_pob, sub.faltan_60
                     """,
                     (padre_id, padre_id),
                 )
                 estado_despues_row = cur.fetchone()
+                faltan_pob = estado_despues_row[2] if estado_despues_row else 0
+                faltan_60 = estado_despues_row[3] if estado_despues_row else 0
 
                 estado_cambio = (
                     estado_antes_row is not None and estado_despues_row is not None
@@ -1972,6 +1984,8 @@ def actualiza_poblacion_municipio(region_id, population, population_60plus, moti
             "poblacion_antes": pob_actual, "poblacion_despues": population,
             "poblacion_60_antes": pob60_actual, "poblacion_60_despues": population_60plus,
             "estado_actualizado": estado_cambio,
+            "municipios_sin_poblacion": faltan_pob,
+            "municipios_sin_60": faltan_60,
         }
     except psycopg2.errors.UndefinedTable:
         return False, (

@@ -35,12 +35,17 @@ def tiene_rol(user, *codigos):
     return any(c in (user.get("roles") or []) for c in codigos)
 
 
-def roles_required(*codigos):
+def roles_required(*codigos, entity_type="diseases"):
     """Restringe la vista a los roles indicados.
 
     Misma mecanica que admin_required, pero parametrizable: la usa el catalogo
     de enfermedades, donde definir parametros epidemiologicos es trabajo del
     EPIDEMIOLOGO (el ADMINISTRADOR entra por ser quien opera el sistema).
+
+    `entity_type` es el modulo que queda en la bitacora del intento denegado.
+    El valor por defecto es "diseases" porque ahi nacio el decorador; al usarlo
+    en otra pantalla hay que pasarlo, o la bitacora atribuiria el intento al
+    catalogo de enfermedades y quedaria inservible para rastrear accesos.
 
     El intento fallido queda en la bitacora: ocultar el boton en la plantilla
     no es control de acceso.
@@ -54,7 +59,7 @@ def roles_required(*codigos):
             g.user = user
             if not tiene_rol(user, *codigos):
                 from backend_web.audit import log_audit
-                log_audit(user["sub"], "PERMISSION_DENIED", "diseases",
+                log_audit(user["sub"], "PERMISSION_DENIED", entity_type,
                           entity_id=request.path)
                 return redirect(url_for("main.dashboard", denegado=1))
             return view(*args, **kwargs)
