@@ -201,6 +201,64 @@ class Validacion(unittest.TestCase):
         self.assertTrue(any("reduccion" in e for e in validar_escenario(esc)))
 
 
+class LetalidadPorEdad(unittest.TestCase):
+    """`letalidad_por_edad` existe para afinar el dato cuando la poblacion viene
+    abierta por grupos. Si la tasa global lo tapara, capturarlo no serviria de
+    nada, que es como estaba antes."""
+
+    def test_con_poblacion_por_edad_gana_la_tabla(self):
+        esc = escenario()
+        esc["enfermedad"]["letalidad"] = 0.0          # global: nadie muere
+        esc["enfermedad"]["letalidad_por_edad"] = {
+            "valor": {"0-19": 0.001, "20-59": 0.01, "60+": 0.2},
+            "fuente": "tabla de prueba", "supuesto": True,
+        }
+        r = simular(esc, 982314)
+        self.assertGreater(r["resumen"]["fallecimientos"], 0,
+                           "la tabla por edad no se aplico")
+        usados = [x["parametro"] for x in r["trazabilidad_parametros"]]
+        self.assertIn("letalidad_por_edad", usados)
+        self.assertNotIn("letalidad", usados)
+
+    def test_entre_dos_tablas_gana_la_clave_canonica(self):
+        """Si `letalidad` ya viene por grupo, no hay nada que afinar: manda ella."""
+        esc = escenario()
+        esc["enfermedad"]["letalidad_por_edad"] = {
+            "valor": {"0-19": 0.9, "20-59": 0.9, "60+": 0.9}, "fuente": "no deberia usarse"}
+        usados = [x["parametro"] for x in simular(esc, 1)["trazabilidad_parametros"]]
+        self.assertIn("letalidad", usados)
+        self.assertNotIn("letalidad_por_edad", usados)
+
+    def test_la_traza_conserva_la_fuente_de_la_tabla(self):
+        esc = escenario()
+        esc["enfermedad"]["letalidad"] = 0.004      # global; la tabla debe ganarle
+        esc["enfermedad"]["letalidad_por_edad"] = {
+            "valor": {"0-19": 0.001, "20-59": 0.01, "60+": 0.2},
+            "fuente": "Verity 2020", "supuesto": True,
+        }
+        traza = {x["parametro"]: x for x in simular(esc, 1)["trazabilidad_parametros"]}
+        self.assertEqual(traza["letalidad_por_edad"]["fuente"], "Verity 2020")
+        self.assertEqual(traza["letalidad_por_edad"]["estado"], "supuesto")
+
+    def test_sin_poblacion_por_edad_se_usa_la_global(self):
+        """Una tabla por edad no se puede aplicar a una poblacion sin grupos:
+        ahi la tasa global es la unica que sirve, y no debe dar error."""
+        esc = escenario(poblacion=200_000)
+        esc["enfermedad"]["tasa_hospitalizacion"] = 0.01
+        esc["enfermedad"]["letalidad"] = 0.004
+        esc["enfermedad"]["letalidad_por_edad"] = {"0-19": 0.001, "20-59": 0.01, "60+": 0.2}
+        self.assertEqual(validar_escenario(esc), [])
+        usados = [x["parametro"] for x in simular(esc, 1)["trazabilidad_parametros"]]
+        self.assertIn("letalidad", usados)
+        self.assertNotIn("letalidad_por_edad", usados)
+
+    def test_tabla_incompleta_se_rechaza(self):
+        esc = escenario()
+        del esc["enfermedad"]["letalidad"]
+        esc["enfermedad"]["letalidad_por_edad"] = {"valor": {"0-19": 0.001}}
+        self.assertTrue(any("60+" in e for e in validar_escenario(esc)))
+
+
 class Trazabilidad(unittest.TestCase):
     def test_estado_de_cada_parametro(self):
         r = simular(escenario(), 1)

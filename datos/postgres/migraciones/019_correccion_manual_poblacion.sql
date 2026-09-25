@@ -9,8 +9,13 @@
 -- `population_60plus`), el ajuste VIGENTE: quien lo hizo, cuando y con que
 -- fuente/motivo. Es la fuente de verdad persistente para que la columna
 -- "Fuente" de la pantalla siga siendo correcta despues de reiniciar la app
--- (no vive en memoria) y para que una reinstalacion no la pise (ver
--- 018_correccion_poblacion_51_municipios.sql, que la respeta si existe).
+-- (no vive en memoria).
+--
+-- OJO con las reinstalaciones: ni la semilla ni 015/016 consultan esta tabla, y
+-- volver a correr dump_completo.sql reaplica 015/016 sobre `regions`. Una
+-- correccion manual sobrevive a la semilla (que usa ON CONFLICT DO NOTHING)
+-- pero NO a una reejecucion del dump. Si eso llega a importar, la guarda va en
+-- 015/016, no aqui.
 --
 -- Guarda tambien `census_value`: la cifra original de INEGI/ITER 2020 con la
 -- que arranco esa fila, para no perder la referencia censal aunque se corrija

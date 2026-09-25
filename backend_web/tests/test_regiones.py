@@ -2,8 +2,9 @@
 Pruebas de integracion contra PostgreSQL real (sin mocks, igual que el resto
 del proyecto). Requieren DATABASE_URL apuntando a una base con el esquema de
 datos/postgres/dump_completo.sql + datos/postgres/semillas/nl_municipios_completos.sql
-+ datos/postgres/migraciones/018_correccion_poblacion_51_municipios.sql ya
-cargados (ver docs/INSTALACION.md, Paso 2).
+ya cargados (ver docs/INSTALACION.md, Paso 2). La semilla trae la poblacion y el
+dato de 60 y mas de los 51 municipios, asi que no hace falta ningun archivo de
+correccion aparte.
 
 Ejecutar:
     DATABASE_URL=postgresql://postgres:postgres_pw@localhost:55432/simulador_epidemico \

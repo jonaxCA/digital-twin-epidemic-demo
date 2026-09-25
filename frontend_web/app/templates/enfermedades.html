@@ -180,8 +180,15 @@
                 {% if e.parametros.informativos %}
                 <div class="detalle-titulo">Otros parámetros del esquema</div>
                 <ul class="detalle-lista">
-                  {% for etiqueta, valor in e.parametros.informativos %}
-                  <li><span>{{ etiqueta }}</span><span>{{ valor }}</span></li>
+                  {% for p in e.parametros.informativos %}
+                  <li>
+                    <span>{{ p.etiqueta }}{% if p.supuesto %}
+                      <span class="badge param-pill param-supuesto">supuesto</span>{% endif %}</span>
+                    <span>{{ p.texto }}</span>
+                  </li>
+                  {% if p.fuente %}
+                  <li class="param-fuente-fila"><span></span><span class="param-fuente-texto">{{ p.fuente }}</span></li>
+                  {% endif %}
                   {% endfor %}
                 </ul>
                 {% endif %}

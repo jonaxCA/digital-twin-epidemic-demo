@@ -181,11 +181,25 @@ def resolver(escenario):
         return float(valor)
 
     def tasa_por_grupo(clave, alias=()):
-        presente = next((k for k in (clave, *alias) if k in enf), None)
-        if presente is None:
+        """Resuelve una tasa que puede venir global o desglosada por grupo de edad.
+
+        Cuando la poblacion viene estratificada se prefiere la tabla por edad si
+        existe; si no, la tasa global. Antes ganaba siempre la clave principal,
+        asi que una enfermedad con `letalidad` y `letalidad_por_edad` ignoraba la
+        segunda: el dato mas fino quedaba sin efecto, que es justo lo contrario
+        de para que se captura. Sin estratificar pasa al reves, porque una tabla
+        por edad no se puede aplicar a una poblacion sin grupos.
+        """
+        candidatos = [(k, _desempaca(enf[k])) for k in (clave, *alias) if k in enf]
+        if not candidatos:
             errores.append(f"Falta el parametro de enfermedad '{clave}'.")
             return None
-        valor, fuente, supuesto = _desempaca(enf[presente])
+        if por_edad:
+            prefiere = lambda v: isinstance(v, dict)
+        else:
+            prefiere = _es_numero
+        presente, (valor, fuente, supuesto) = next(
+            (c for c in candidatos if prefiere(c[1][0])), candidatos[0])
         if _es_numero(valor):
             if not 0 <= valor <= 1:
                 errores.append(f"'{clave}' debe estar entre 0 y 1.")
@@ -206,7 +220,7 @@ def resolver(escenario):
         else:
             errores.append(f"'{clave}' debe ser un numero o un diccionario por grupo.")
             return None
-        traza.append({"parametro": clave, "valor": valor, "fuente": fuente,
+        traza.append({"parametro": presente, "valor": valor, "fuente": fuente,
                       "estado": _estado_traza(fuente, supuesto)})
         return tasas
 

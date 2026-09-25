@@ -14,13 +14,13 @@ MongoDB, Redis ni CUDA todavía.
 
 ## 0. Organización del equipo (antes de escribir código)
 
-- [ ] El proyecto vive en **su propio repositorio** (no dentro de la carpeta de usuario)
-- [ ] Asignar un responsable a cada bloque A–H
-- [ ] Crear un issue por cada casilla de este documento
-- [ ] Regla: una rama por issue (`feat/escenarios-versionado`, `fix/claves-inegi`, …)
-- [ ] Regla: todo entra por Pull Request revisado por otro integrante, nada directo a `main`
-- [ ] Regla: commits pequeños e incrementales, con el autor correcto configurado en git
-- [ ] Acordar la convención de nombres de migraciones: `011_…sql`, `012_…sql`, …
+- [x] El proyecto vive en **su propio repositorio** (no dentro de la carpeta de usuario)
+- [x] Asignar un responsable a cada bloque A–H
+- [x] Crear un issue por cada casilla de este documento
+- [x] Regla: una rama por issue (`feat/escenarios-versionado`, `fix/claves-inegi`, …)
+- [x] Regla: todo entra por Pull Request revisado por otro integrante, nada directo a `main`
+- [x] Regla: commits pequeños e incrementales, con el autor correcto configurado en git
+- [x] Acordar la convención de nombres de migraciones: `011_…sql`, `012_…sql`, …
 - [ ] El `.tar.gz` de entrega incluye la carpeta `.git`
 
 ---
@@ -73,7 +73,9 @@ MongoDB, Redis ni CUDA todavía.
 - [x] Mostrar en la UI qué parámetros son supuestos, cuáles no tienen fuente y cuáles faltan
 - [x] **Fuentes reales cargadas para COVID-19 e Influenza**: ambas quedaron **simulables**, con 4 parámetros con referencia publicada y 2 marcados como supuesto en cada una. Cada cifra se verificó en el texto de su fuente antes de capturarla. Las dos tasas de influenza son derivadas (CDC cuenta por caso sintomático y el motor necesita por infección), por eso van marcadas como supuesto con la conversión explicada
 - [x] Migración `017_parametros_enfermedades.sql`: los parámetros quedan en el repositorio, no solo en la base de quien los capturó. Fusiona con `||` (respeta `letalidad_por_edad` y demás) y no pisa lo que alguien ya haya capturado desde la pantalla
-- [ ] (Opcional, mejora) Cargar la letalidad **por grupo de edad** de Verity et al. 2020 en vez del promedio: el motor ya la acepta y ahora hay población 60+ por municipio
+- [x] (Opcional, mejora) Letalidad **por grupo de edad** con fuente, en vez del promedio: COVID-19 de Verity et al. 2020 (tabla 1, verificada contra el texto completo y contra sus dos fe de erratas, que no la tocan) e influenza del CDC 2019-2020 por grupo de edad, de la misma revisión de la que salen los valores globales del catálogo. Ambas reagrupadas a los cinco grupos del motor ponderando por la estructura de edad de Nuevo León, y por eso marcadas como supuesto: el reagrupamiento es aritmética del equipo, no un dato publicado. Migración `020_letalidad_por_edad.sql`, generada por `datos/scripts/build_letalidad_edad.py`
+- [x] Corregido de paso: el motor **aceptaba** `letalidad_por_edad` pero la letalidad global le ganaba siempre, así que la tabla nunca se aplicaba. Ahora manda la tabla cuando la población viene abierta por grupos de edad
+- [ ] Población municipal por los cinco grupos de edad: hoy `regions` solo guarda total y 60+, así que un escenario municipal estratificado se rechaza porque los grupos no coinciden con los de la tabla de letalidad. El ITER 2020 que ya descargamos trae las columnas quinquenales por municipio; solo extrajimos `P_60YMAS`. **Conviene resolverlo antes del bloque D**, porque los escenarios se arman sobre municipios
 - [x] Solo `EPIDEMIOLOGO` y `ADMINISTRADOR` pueden editar (`roles_required`); el intento de un analista queda en la bitácora como `PERMISSION_DENIED`
 - [x] Auditoría de crear / editar / activar / desactivar, con estado antes y después
 
@@ -81,11 +83,11 @@ MongoDB, Redis ni CUDA todavía.
 
 ## C. Catálogo de regiones
 
-- [ ] Vista de consulta jerárquica: Nuevo León → municipios
-- [ ] Columnas: clave INEGI, nombre, población, población 60+, fuente
-- [ ] Búsqueda y orden por población
-- [ ] Sin aproximaciones: los datos vienen del bloque A
-- [ ] (Opcional) Edición de población solo para `ADMINISTRADOR`, con auditoría
+- [x] Vista de consulta jerárquica: Nuevo León → municipios
+- [x] Columnas: clave INEGI, nombre, población, población 60+, fuente
+- [x] Búsqueda y orden por población
+- [x] Sin aproximaciones: los datos vienen del bloque A
+- [x] (Opcional) Edición de población solo para `ADMINISTRADOR`, con auditoría
 
 ---
 
@@ -142,7 +144,10 @@ MongoDB, Redis ni CUDA todavía.
 - [x] Pruebas unitarias: reproducibilidad, conservación de población, validación, sin intervención vs con intervención (`python -m unittest discover -s tests -t .`)
 - [x] Indicadores resumen (adelanto de F): acumulados, activos, pico, día del pico, hospitalizaciones, fallecimientos, tasa de ataque
 - [x] Sustituir la población por grupo de edad del ejemplo por datos del Censo 2020: `python -m motor` ya reparte con la estructura real del estado
-- [ ] Capturar R0, tasa de hospitalización y días de hospitalización **con fuente** en las enfermedades — la pantalla ya existe (bloque B); hoy a las 6 enfermedades del catálogo les faltan entre 3 y 6 parámetros, así que **ninguna se puede simular todavía**
+- [x] COVID-19 ancestral e influenza estacional: los seis parámetros con fuente publicada o con la marca explícita de supuesto (migraciones `017` y `020`). Las dos quedaron **simulables**
+- [ ] Dengue, malaria y zika: faltan R0, tasa de hospitalización, días de hospitalización y letalidad; incubación y período infeccioso ya están pero **sin fuente**. **Ojo antes de capturar**: las tres se transmiten por vector y el motor es un SEIR de persona a persona con capas de contacto, así que un R0 bien citado igual produce una simulación segura y equivocada, y `CIERRE_ESCUELAS` o `REDUCCION_AFORO` no actúan como el modelo supone. Decidir primero: se simulan con este motor asumiéndolo, se marcan como no simulables, o esperan a un modelo con vector
+- [ ] Añadir a `SIMPLIFICACIONES` del motor que el modelo asume **transmisión directa persona a persona**; hoy la lista no lo dice
+- [ ] Patógeno X: es hipotético y no tiene literatura que buscar. Definir en equipo qué escenario representa (¿más transmisible que COVID? ¿más letal?); sus seis parámetros van como supuesto por diseño, no por falta de trabajo
 
 ---
 

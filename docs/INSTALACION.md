@@ -102,7 +102,7 @@ está en el `PATH`.
 | Archivo | Qué carga |
 |---|---|
 | `datos/postgres/dump_completo.sql` | El esquema completo: las migraciones numeradas concatenadas |
-| `datos/postgres/semillas/nl_municipios_completos.sql` | Completa los 51 municipios de Nuevo León |
+| `datos/postgres/semillas/nl_municipios_completos.sql` | Completa los 51 municipios de Nuevo León, con su población y su población de 60 años o más del Censo 2020 |
 | `datos/postgres/semillas/demo_datos_nl.sql` | Datos de demostración (sintéticos): 3,824 casos, escenario, simulaciones y la usuaria de login |
 
 **El orden importa.** Los dos últimos archivos dependen del esquema y del catálogo
@@ -476,7 +476,7 @@ datos/postgres/migraciones/        cada migracion como archivo individual
 datos/postgres/semillas/           municipios (generado) y datos de demostracion (incluye las 3 cuentas)
 
 datos/scripts/build_municipios_inegi.py  capa municipal de INEGI -> geojson del mapa + centroides
-datos/scripts/build_regiones_sql.py      centroides + catalogo -> semillas/nl_municipios_completos.sql
+datos/scripts/build_regiones_sql.py      censo + centroides + catalogo -> semillas/nl_municipios_completos.sql
 datos/scripts/gen_demo_data.py           generador de los datos de demostracion (semilla fija)
 datos/scripts/verifica_migraciones.py    comprueba migraciones sueltas contra el dump
 datos/geo/inegi_mg2024/      capa municipal oficial (Marco Geoestadistico 2024, ent. 19)

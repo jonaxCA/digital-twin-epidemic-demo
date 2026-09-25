@@ -467,6 +467,25 @@ def _desarma_param(bruto):
     return None, None, False
 
 
+def _inicio_de_grupo(par):
+    """Ordena "0-19", "20-39", ..., "80+" por la edad con que empiezan. Lo que
+    no empiece con un numero se va al final, en orden alfabetico."""
+    clave = str(par[0])
+    digitos = ""
+    for c in clave:
+        if not c.isdigit():
+            break
+        digitos += c
+    return (0, int(digitos), clave) if digitos else (1, 0, clave)
+
+
+def _numero_corto(valor):
+    """3.11e-05 se lee mejor como 0.00311%. Solo para mostrar."""
+    if isinstance(valor, (int, float)) and not isinstance(valor, bool):
+        return f"{valor * 100:.4g}%"
+    return str(valor)
+
+
 def _formatea_valor(spec, valor):
     if valor is None:
         return None
@@ -514,16 +533,30 @@ def estado_parametros(default_params):
             "estado": estado,
         })
 
+    # Un informativo puede venir pelado ({"0-19": 0.0001, ...}, como lo dejo
+    # 010) o con trazabilidad ({"valor": {...}, "fuente": ..., "supuesto": ...},
+    # como lo deja 020). Sin desenvolverlo, la pantalla imprimia el diccionario
+    # entero -- fuente incluida -- en una sola linea ilegible.
     informativos = []
     for clave, etiqueta in PARAMETROS_INFORMATIVOS.items():
         bruto = params.get(clave)
         if bruto in (None, {}, ""):
             continue
-        if isinstance(bruto, dict):
-            texto = ", ".join(f"{k}: {v}" for k, v in bruto.items())
+        valor, fuente, supuesto = _desarma_param(bruto)
+        if valor is None and isinstance(bruto, dict):
+            valor = bruto                      # formato pelado: el valor es el dict
+        if valor in (None, {}, ""):
+            continue
+        if isinstance(valor, dict):
+            # Por edad, no por el orden en que JSONB devuelve las claves: sin
+            # esto "80+" sale primero y la tabla se lee al reves de como se
+            # piensa.
+            texto = ", ".join(f"{k}: {_numero_corto(v)}"
+                              for k, v in sorted(valor.items(), key=_inicio_de_grupo))
         else:
-            texto = str(bruto)
-        informativos.append((etiqueta, texto))
+            texto = str(valor)
+        informativos.append({"etiqueta": etiqueta, "texto": texto,
+                             "fuente": fuente or "", "supuesto": supuesto})
 
     return {
         "detalle": detalle,
@@ -1646,7 +1679,8 @@ def eliminar_usuario(user_id):
 # La fuente que se muestra distingue el dato censal original del ajuste
 # manual: `region_population_adjustments` (019_correccion_manual_poblacion.sql)
 # guarda ese ajuste vigente; si una region+campo no tiene fila ahi, la cifra
-# sigue siendo la del censo (015/016/018).
+# sigue siendo la del censo: la trae la semilla nl_municipios_completos.sql
+# al insertar el municipio, y 015/016 la corrigen en bases ya instaladas.
 
 # Whitelist de columnas ordenables: nunca se interpola la entrada del usuario
 # directamente en el SQL, solo se usa para elegir una de estas dos.

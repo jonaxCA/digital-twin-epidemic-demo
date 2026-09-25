@@ -3,22 +3,24 @@
 -- Simulador de respuesta a epidemias — construccion completa de la base
 --
 -- Archivo generado automaticamente concatenando, en orden, las migraciones
--- numeradas del proyecto que NO dependen de las semillas de datos:
+-- numeradas del proyecto:
 --   001_base.sql            007_simulacion.sql          013_escenarios_aprobacion.sql
 --   002_seguridad.sql       008_comentarios.sql         014_simulacion_resultados.sql
 --   003_sistema.sql         009_roles_bd.sql            015_poblacion_censo_2020.sql
 --   004_catalogos.sql       010_datos_iniciales.sql     016_poblacion_60mas.sql
---   005_vigilancia.sql      011_fix_audit_log_delete.sql   017_parametros_enfermedades.sql
---   006_escenarios.sql      012_corrige_claves_inegi_nl.sql             019_correccion_manual_poblacion.sql
+--   005_vigilancia.sql      011_fix_audit_log_delete.sql 017_parametros_enfermedades.sql
+--   006_escenarios.sql      012_corrige_claves_inegi_nl.sql 019_correccion_manual_poblacion.sql
+--                                                       020_letalidad_por_edad.sql
 --
 -- Cada bloque original conserva su propio BEGIN/COMMIT y su propio INSERT en
 -- schema_migrations, asi que este archivo se comporta exactamente igual que
 -- correr esos .sql uno por uno, pero en una sola pasada.
 --
--- `018_correccion_poblacion_51_municipios.sql` NO esta aqui a proposito:
--- necesita que ya existan los 51 municipios, y esos los agrega
--- datos/postgres/semillas/nl_municipios_completos.sql DESPUES de este
--- archivo. Se corre aparte (ver docs/INSTALACION.md, Paso 2).
+-- Este archivo se carga ANTES que las semillas, asi que 015 y 016 solo alcanzan
+-- a los 10 municipios que siembra 010. Los otros 41 traen su poblacion y su
+-- dato de 60 y mas desde el INSERT de
+-- datos/postgres/semillas/nl_municipios_completos.sql: por eso no hace falta
+-- ninguna migracion de correccion aparte (ver docs/INSTALACION.md, Paso 2).
 --
 -- Una base creada con una version anterior de este archivo se actualiza
 -- volviendolo a correr completo: lo existente no se duplica y se aplican las
@@ -2341,8 +2343,13 @@ COMMIT;
 -- `population_60plus`), el ajuste VIGENTE: quien lo hizo, cuando y con que
 -- fuente/motivo. Es la fuente de verdad persistente para que la columna
 -- "Fuente" de la pantalla siga siendo correcta despues de reiniciar la app
--- (no vive en memoria) y para que una reinstalacion no la pise (ver
--- 018_correccion_poblacion_51_municipios.sql, que la respeta si existe).
+-- (no vive en memoria).
+--
+-- OJO con las reinstalaciones: ni la semilla ni 015/016 consultan esta tabla, y
+-- volver a correr dump_completo.sql reaplica 015/016 sobre `regions`. Una
+-- correccion manual sobrevive a la semilla (que usa ON CONFLICT DO NOTHING)
+-- pero NO a una reejecucion del dump. Si eso llega a importar, la guarda va en
+-- 015/016, no aqui.
 --
 -- Guarda tambien `census_value`: la cifra original de INEGI/ITER 2020 con la
 -- que arranco esa fila, para no perder la referencia censal aunque se corrija
@@ -2426,6 +2433,73 @@ COMMENT ON COLUMN region_population_adjustments.reason IS
 
 INSERT INTO schema_migrations (version, description)
 VALUES ('019', 'Catalogos: tabla de ajustes manuales de poblacion (Bloque C, issue #50)')
+ON CONFLICT (version) DO NOTHING;
+
+COMMIT;
+
+-- =============================================================================
+-- 020_letalidad_por_edad.sql
+-- Dominio: catalogos.
+-- Generado por datos/scripts/build_letalidad_edad.py: no editar a mano.
+--
+-- Reemplaza la tabla `letalidad_por_edad` de COVID-19 e influenza, que venia
+-- con cifras redondas sin ninguna fuente, por uno derivado de literatura
+-- publicada. Es el parametro que decide los fallecimientos de la simulacion y
+-- el que mas varia entre grupos: del mas joven al mas viejo hay tres ordenes de
+-- magnitud.
+--
+-- El motor lee esta tabla en lugar de la letalidad global cuando el escenario
+-- trae la poblacion abierta por grupos de edad.
+--
+-- LAS DOS VAN MARCADAS COMO SUPUESTO. Las cifras por edad de las fuentes si
+-- estan publicadas, pero ninguna publica los cinco grupos que usa el motor:
+-- reagruparlas ponderando por la estructura de edad de Nuevo Leon es aritmetica
+-- del equipo. El campo "fuente" de cada una explica el procedimiento completo.
+--
+-- NO PISA LO CAPTURADO A MANO: solo actua si la tabla que hay no tiene todavia
+-- un campo "fuente", es decir si sigue siendo la inventada.
+-- =============================================================================
+
+BEGIN;
+
+-- Influenza estacional A(H1N1)
+UPDATE diseases
+SET    default_params = default_params || '{
+        "letalidad_por_edad": {
+                "fuente": "DERIVADO POR EL EQUIPO a partir de CDC, Estimated Flu Disease Burden 2019-2020 (actualizado 15/11/2024), defunciones y enfermedades sintomaticas por grupo de edad. Dos pasos, ninguno publicado por el CDC: (1) letalidad por caso sintomatico = defunciones/enfermedades en cada banda del CDC, llevada a por infeccion con 66.9% de infecciones sintomaticas (Carrat et al. 2008, Am J Epidemiol 167(7):775-785, doi:10.1093/aje/kwm375), la misma conversion que usan los valores globales de esta enfermedad; (2) las bandas del CDC (0-4, 5-17, 18-49, 50-64, 65+) se reagruparon a los cinco grupos del motor ponderando por la estructura de edad de Nuevo Leon (Censo 2020, INEGI), suponiendo tasa constante dentro de cada banda del CDC y reparto parejo dentro del grupo quinquenal 15-19, que es el unico que queda partido. OJO: la banda mas alta del CDC es 65+, sin abrir los 80 y mas, asi que los grupos 60-79 y 80+ heredan la misma tasa de base y la tabla aplana el gradiente justo donde mas sube; el 80+ real es mas alto que este valor. Es la misma vintage del CDC de la que salen la letalidad y la tasa de hospitalizacion globales del catalogo. Estimacion de Estados Unidos: no esta calibrada para Nuevo Leon.",
+                "supuesto": true,
+                "valor": {
+                        "0-19": 3.11e-05,
+                        "20-39": 9.38e-05,
+                        "40-59": 0.000217,
+                        "60-79": 0.00338,
+                        "80+": 0.00526
+                }
+        }
+}'::jsonb
+WHERE  code = 'INFLUENZA_ESTACIONAL'
+  AND  NOT (default_params -> 'letalidad_por_edad' ? 'fuente');
+
+-- SARS-CoV-2 (linaje ancestral)
+UPDATE diseases
+SET    default_params = default_params || '{
+        "letalidad_por_edad": {
+                "fuente": "DERIVADO POR EL EQUIPO a partir de Verity et al. 2020, Lancet Infect Dis 20(6):669-677, tabla 1, columna Infection fatality ratio (doi:10.1016/S1473-3099(20)30243-7). El estudio publica el IFR por decenio de edad: 0.00161% en 0-9 hasta 7.80% en 80+, con IFR global 0.657% (IC 0.389-1.33). El motor usa grupos de veinte anios, asi que cada par de decenios se promedio ponderando por la estructura de edad de Nuevo Leon (Censo 2020, INEGI). Los limites de los decenios coinciden con los del censo, asi que el reagrupamiento no parte ningun grupo. Lo publicado es el IFR por decenio; el promedio ponderado lo hace el equipo. Se revisaron las dos fe de erratas del articulo y ninguna toca esta tabla. Estimacion de China, principios de 2020, linaje ancestral: no esta calibrada para Nuevo Leon.",
+                "supuesto": true,
+                "valor": {
+                        "0-19": 4.3e-05,
+                        "20-39": 0.00056,
+                        "40-59": 0.00346,
+                        "60-79": 0.0273,
+                        "80+": 0.078
+                }
+        }
+}'::jsonb
+WHERE  code = 'SARS_COV_2_ANCESTRAL'
+  AND  NOT (default_params -> 'letalidad_por_edad' ? 'fuente');
+
+INSERT INTO schema_migrations (version, description)
+VALUES ('020', 'Catalogos: letalidad por grupo de edad de COVID-19 e influenza')
 ON CONFLICT (version) DO NOTHING;
 
 COMMIT;
