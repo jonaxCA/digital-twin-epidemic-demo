@@ -62,25 +62,35 @@ def roles_required(*codigos):
     return decorador
 
 
-def admin_required(view):
+def admin_required(view=None, *, entity_type="users"):
     """Restringe la vista al rol ADMINISTRADOR.
 
     Un usuario logueado pero sin el rol (p.ej. diana.flores, EPIDEMIOLOGO) NO
     entra: se le manda al dashboard y se deja el intento en la bitacora como
     PERMISSION_DENIED. Sin esto, cualquier cuenta autenticada podria dar de
     alta o borrar usuarios.
+
+    `entity_type` es el modulo que queda en la bitacora del intento denegado
+    (por defecto "users", que es donde vivia originalmente este decorador).
+    Se puede usar tanto sin parentesis (`@admin_required`) como parametrizado
+    (`@admin_required(entity_type="regions")`), igual que roles_required.
     """
-    @wraps(view)
-    def wrapped(*args, **kwargs):
-        user = get_current_user()
-        if not user:
-            return redirect(url_for("main.login", next=request.path))
-        g.user = user
-        if not tiene_rol(user, "ADMINISTRADOR"):
-            # import local para no crear un ciclo audit <-> auth al importar
-            from backend_web.audit import log_audit
-            log_audit(user["sub"], "PERMISSION_DENIED", "users",
-                      entity_id=request.path)
-            return redirect(url_for("main.dashboard", denegado=1))
-        return view(*args, **kwargs)
-    return wrapped
+    def decorador(v):
+        @wraps(v)
+        def wrapped(*args, **kwargs):
+            user = get_current_user()
+            if not user:
+                return redirect(url_for("main.login", next=request.path))
+            g.user = user
+            if not tiene_rol(user, "ADMINISTRADOR"):
+                # import local para no crear un ciclo audit <-> auth al importar
+                from backend_web.audit import log_audit
+                log_audit(user["sub"], "PERMISSION_DENIED", entity_type,
+                          entity_id=request.path)
+                return redirect(url_for("main.dashboard", denegado=1))
+            return v(*args, **kwargs)
+        return wrapped
+
+    if view is not None:
+        return decorador(view)
+    return decorador

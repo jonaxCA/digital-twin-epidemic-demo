@@ -430,6 +430,81 @@ def export_resumen_csv():
 
 
 # ---------------------------------------------------------------------------
+# Regiones (Bloque C) -- Nuevo Leon y sus 51 municipios
+# ---------------------------------------------------------------------------
+# Consulta abierta a cualquier usuario autenticado (igual que Enfermedades).
+# La edicion de poblacion, mas abajo, es exclusiva de ADMINISTRADOR: tanto el
+# GET como el POST pasan por admin_required(entity_type="regions"), asi que un
+# intento por URL directa o por un POST armado a mano tambien rebota y queda
+# en la bitacora como PERMISSION_DENIED sobre "regions".
+@bp.route("/regiones")
+@login_required
+def regiones():
+    busqueda = (request.args.get("q") or "").strip() or None
+    orden = request.args.get("orden") or "nombre"
+    direccion = request.args.get("dir") or "asc"
+    catalogo = queries.get_regiones_catalogo(busqueda=busqueda, orden=orden, direccion=direccion)
+    return render_template(
+        "regiones.html",
+        estado=queries.get_estado_nl(),
+        catalogo=catalogo,
+        active_nav="regiones",
+    )
+
+
+@bp.route("/regiones/<int:region_id>/editar", methods=["GET", "POST"])
+@admin_required(entity_type="regions")
+def region_editar(region_id):
+    """Correccion manual de poblacion de un municipio. Exclusiva de
+    ADMINISTRADOR: la clave INEGI, el nombre, el nivel y el padre no se tocan
+    aqui, y el estado no se edita aparte -- se recalcula solo, como el
+    agregado de sus 51 municipios (queries.actualiza_poblacion_municipio)."""
+    municipio = queries.get_region_municipio(region_id)
+    if not municipio:
+        flash("Ese municipio ya no existe en el catálogo.", "error")
+        return redirect(url_for("main.regiones"))
+
+    if request.method == "GET":
+        valores = {
+            "population": municipio["population"],
+            "population_60plus": municipio["population_60plus"],
+            "motivo": "",
+        }
+        return render_template("region_form.html", municipio=municipio, errores=[],
+                               valores=valores, active_nav="regiones")
+
+    population_raw = request.form.get("population")
+    population_60_raw = request.form.get("population_60plus")
+    motivo = request.form.get("motivo") or ""
+    esperado_population = request.form.get("esperado_population", type=int)
+    esperado_population_60plus = request.form.get("esperado_population_60plus", type=int)
+    valores = {"population": population_raw, "population_60plus": population_60_raw, "motivo": motivo}
+
+    poblacion, poblacion_60, errores = queries.valida_poblacion_municipio(
+        population_raw, population_60_raw, motivo)
+    if esperado_population is None or esperado_population_60plus is None:
+        errores.append("No se pudo verificar el estado del formulario. Recarga la página e intenta de nuevo.")
+
+    if errores:
+        return render_template("region_form.html", municipio=municipio, errores=errores,
+                               valores=valores, active_nav="regiones"), 400
+
+    ok, error, resultado = queries.actualiza_poblacion_municipio(
+        region_id, poblacion, poblacion_60, motivo, g.user["sub"],
+        esperado_population, esperado_population_60plus,
+    )
+    if not ok:
+        return render_template("region_form.html", municipio=municipio, errores=[error],
+                               valores=valores, active_nav="regiones"), 400
+
+    mensaje = f"Población de «{resultado['municipio']}» actualizada."
+    if resultado["estado_actualizado"]:
+        mensaje += " El total de Nuevo León se recalculó con la suma de sus 51 municipios."
+    flash(mensaje, "ok")
+    return redirect(url_for("main.regiones"))
+
+
+# ---------------------------------------------------------------------------
 # 6. Monitoreo -- analisis epidemiologico
 # ---------------------------------------------------------------------------
 INDICADORES = {"incidencia": "Incidencia / 100k", "casos": "Casos confirmados"}
