@@ -2120,6 +2120,14 @@ def get_enfermedades_para_escenario():
     return salida
 
 
+def _hay_parametros_congelados():
+    """`disease_params` llega en la migracion 024. Una base anterior tiene que
+    seguir funcionando: sin la columna, los parametros son siempre los vivos."""
+    return bool(query("""SELECT 1 FROM information_schema.columns
+                         WHERE table_name = 'scenario_versions'
+                           AND column_name = 'disease_params'"""))
+
+
 def _hay_columnas_de_edad_en_version():
     """Las columnas de poblacion por edad llegan en la migracion 023. Una base
     anterior tiene que seguir listando escenarios, solo sin esa informacion."""
@@ -2455,11 +2463,14 @@ def get_escenario_detalle(scenario_id, version_number=None):
 
     filtro = ("v.version_number = %s" if version_number is not None else "v.is_current")
     params = (scenario_id, version_number) if version_number is not None else (scenario_id,)
+    congelados = ("v.disease_params" if _hay_parametros_congelados()
+                  else "NULL::jsonb AS disease_params")
     version = query(
         f"""SELECT v.id, v.version_number, v.status, v.is_current, v.population_size,
                    v.horizon_days, v.initial_infected, v.notes, v.created_at,
                    v.population_by_age, v.population_age_unknown, v.age_unknown_policy,
                    v.created_by, v.submitted_at, v.reviewed_at, v.review_comment,
+                   {congelados},
                    u.full_name AS autor, r.full_name AS revisor
             FROM scenario_versions v
             JOIN users u ON u.id = v.created_by
@@ -2478,10 +2489,20 @@ def get_escenario_detalle(scenario_id, version_number=None):
                WHERE i.scenario_version_id = %s
                ORDER BY i.order_index, i.start_day, i.id""", (version["id"],))]
 
+    # Que parametros de enfermedad "valen" para esta version. Mientras es
+    # borrador, los vivos del catalogo; congelada, su fotografia. Si una version
+    # ya no es borrador y no tiene fotografia, salio de borrador antes de que la
+    # columna existiera: se usan los vivos y la pantalla lo advierte, porque el
+    # resultado ya no se explica solo con lo que se ve.
+    congelada = version["disease_params"] if version else None
     return {
         "escenario": dict(escenario),
         "version": dict(version) if version else None,
         "intervenciones": intervenciones,
+        "parametros_enfermedad": congelada or escenario["default_params"],
+        "parametros_congelados": congelada is not None,
+        "parametros_sin_congelar": bool(
+            version and version["status"] != "borrador" and congelada is None),
         # Editable solo la vigente y solo en borrador: una version anterior es
         # historia, y una enviada a revision cambiada a escondidas dejaria al
         # revisor aprobando algo que ya no existe.
@@ -2544,7 +2565,7 @@ def revisa_version(detalle):
         "initial_infected": version["initial_infected"],
         "horizon_days": version["horizon_days"],
     }
-    esc = escenario_para_motor(datos, escenario["default_params"],
+    esc = escenario_para_motor(datos, detalle["parametros_enfermedad"],
                               intervenciones_para_motor(detalle["intervenciones"]))
     try:
         return [], resolver(esc)["avisos"]
@@ -3020,22 +3041,40 @@ def envia_a_revision(scenario_id, user_id):
         return False, ("El motor no puede correr esta versión, así que no tiene sentido "
                        "enviarla a revisión: " + errores_motor[0])
 
+    # Aqui se congelan los parametros de la enfermedad: es el unico camino de
+    # salida de borrador, asi que es el punto donde la version deja de poder
+    # cambiar y tiene que quedar explicandose a si misma. Se toman los vivos en
+    # este instante, que son los que el revisor va a estar mirando.
+    from .audit import _serializa
+    congelar = _hay_parametros_congelados()
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    """UPDATE scenario_versions
-                       SET status = 'en_revision', submitted_at = now()
-                       WHERE id = %s AND status = 'borrador'
-                       RETURNING version_number""",
-                    (version["id"],))
+                if congelar:
+                    cur.execute(
+                        """UPDATE scenario_versions v
+                           SET status = 'en_revision', submitted_at = now(),
+                               disease_params = d.default_params
+                           FROM scenarios s
+                           JOIN diseases d ON d.id = s.disease_id
+                           WHERE v.id = %s AND v.status = 'borrador' AND s.id = v.scenario_id
+                           RETURNING v.version_number""",
+                        (version["id"],))
+                else:
+                    cur.execute(
+                        """UPDATE scenario_versions
+                           SET status = 'en_revision', submitted_at = now()
+                           WHERE id = %s AND status = 'borrador'
+                           RETURNING version_number""",
+                        (version["id"],))
                 fila = cur.fetchone()
                 if not fila:
                     return False, ("Alguien cambió el estado de esta versión mientras "
                                    "la enviabas. Recarga la página.")
                 _auditar(cur, user_id, "UPDATE", "scenario_versions", version["id"],
                          antes={"status": "borrador"},
-                         despues={"status": "en_revision", "version_number": fila[0]})
+                         despues={"status": "en_revision", "version_number": fila[0],
+                                  "parametros_congelados": congelar})
             conn.commit()
         return True, None
     except psycopg2.errors.CheckViolation as exc:
