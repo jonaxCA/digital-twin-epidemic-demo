@@ -13,6 +13,8 @@
 --                                                       020_letalidad_por_edad.sql
 --                                                       021_poblacion_por_grupo_edad.sql
 --                                                       022_poblacion_60plus_derivada.sql
+--                                                       023_escenarios_poblacion_por_edad.sql
+--                                                       024_version_congela_parametros.sql
 --
 -- Cada bloque original conserva su propio BEGIN/COMMIT y su propio INSERT en
 -- schema_migrations, asi que este archivo se comporta exactamente igual que
@@ -3009,6 +3011,149 @@ COMMENT ON COLUMN regions.population_60plus IS
 
 INSERT INTO schema_migrations (version, description)
 VALUES ('022', 'Catalogos: population_60plus pasa a derivarse de region_age_groups')
+ON CONFLICT (version) DO NOTHING;
+
+COMMIT;
+
+-- =============================================================================
+-- 023_escenarios_poblacion_por_edad.sql
+-- Dominio: escenarios.
+--
+-- Prepara `scenario_versions` para lo que el motor ya sabe consumir: poblacion
+-- abierta por grupo de edad y una decision explicita sobre la gente sin edad
+-- declarada. Hasta ahora la version guardaba un solo entero, asi que un
+-- escenario estratificado no se podia representar ni, por lo tanto, reproducir.
+--
+-- 1) EL TOPE DE POBLACION SUBE DE 5 A 20 MILLONES
+-- Nuevo Leon tiene 5,784,442 habitantes, asi que con el tope anterior un
+-- escenario del estado completo era imposible de guardar -- y es el primero que
+-- alguien va a pedir. Ningun municipio se acercaba al tope, de ahi que no se
+-- hubiera notado. Se pone en 20,000,000: cubre con margen a la entidad mas
+-- poblada del pais (Estado de Mexico, 16,992,418 en el Censo 2020), asi que el
+-- limite deja de ser un obstaculo sin volverse un cheque en blanco. El mismo
+-- numero esta en POBLACION_MAX del motor; los dos tienen que moverse juntos.
+--
+-- 2) POBLACION POR GRUPO DE EDAD, GUARDADA EN LA VERSION
+-- `population_by_age` guarda el reparto que se USO, no un puntero a la region.
+-- Es la misma decision que ya tomaron `population_size`, `horizon_days` e
+-- `initial_infected`: una version es una fotografia. Si manana se corrige la
+-- poblacion de un municipio, las corridas viejas siguen explicando su propio
+-- resultado. Queda NULL cuando el escenario no se estratifica.
+--
+-- 3) LA EDAD NO DECLARADA EXIGE POLITICA
+-- `population_age_unknown` son las personas que el censo cuenta sin ponerles
+-- edad (21 de cada 1,000 en Nuevo Leon). `age_unknown_policy` dice que se hizo
+-- con ellas: 'excluir' las deja fuera de la corrida, 'prorratear' las reparte
+-- entre los grupos -- una imputacion, que el motor reporta como supuesto. El
+-- CHECK las ata: si hay gente sin edad hay politica, y si no hay, no.
+--
+-- Lo que la base NO puede comprobar es que population_size sea igual a la suma
+-- de los grupos mas los sin edad, porque un CHECK no admite subconsultas y
+-- sumar un JSONB las necesita. Eso lo valida `queries.valida_escenario`.
+--
+-- Es idempotente.
+-- =============================================================================
+
+BEGIN;
+
+ALTER TABLE scenario_versions
+    DROP CONSTRAINT IF EXISTS ck_scenario_versions_poblacion,
+    ADD  CONSTRAINT ck_scenario_versions_poblacion CHECK (
+        population_size >= 1000 AND population_size <= 20000000);
+
+ALTER TABLE scenario_versions
+    ADD COLUMN IF NOT EXISTS population_by_age      JSONB,
+    ADD COLUMN IF NOT EXISTS population_age_unknown INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS age_unknown_policy     VARCHAR(20);
+
+ALTER TABLE scenario_versions
+    DROP CONSTRAINT IF EXISTS ck_scenario_versions_edad,
+    ADD  CONSTRAINT ck_scenario_versions_edad CHECK (
+        population_age_unknown >= 0
+        -- Sin grupos de edad no hay "sin edad": ese entero solo significa algo
+        -- frente a un reparto por grupos.
+        AND (population_age_unknown = 0 OR population_by_age IS NOT NULL)
+        -- Politica exactamente cuando hace falta: ni de mas ni de menos.
+        AND (population_age_unknown = 0) = (age_unknown_policy IS NULL)
+        AND (age_unknown_policy IS NULL
+             OR age_unknown_policy IN ('excluir', 'prorratear'))
+        AND (population_by_age IS NULL
+             OR jsonb_typeof(population_by_age) = 'object'));
+
+COMMENT ON COLUMN scenario_versions.population_by_age IS
+    'Poblacion por grupo de edad que uso esta version, como {"0-19": 307729, ...}. Es una fotografia, no un puntero a region_age_groups: si la poblacion de la region se corrige despues, esta version sigue explicando su propio resultado. NULL cuando el escenario no se estratifica por edad. Las claves tienen que coincidir con las de diseases.default_params -> letalidad_por_edad.';
+COMMENT ON COLUMN scenario_versions.population_age_unknown IS
+    'Personas que el censo cuenta sin edad declarada y que por eso no caen en ningun grupo. Cero cuando el escenario no se estratifica.';
+COMMENT ON COLUMN scenario_versions.age_unknown_policy IS
+    'Que se hizo con la poblacion sin edad declarada: excluir (queda fuera de la corrida) o prorratear (se reparte entre los grupos, lo que es una imputacion y el motor la reporta como supuesto). Obligatoria si population_age_unknown > 0, prohibida si es cero.';
+COMMENT ON COLUMN scenario_versions.population_size IS
+    'Poblacion total de la version. Cuando hay reparto por edad, es la suma de population_by_age mas population_age_unknown; lo verifica la aplicacion, porque un CHECK no puede sumar un JSONB.';
+
+INSERT INTO schema_migrations (version, description)
+VALUES ('023', 'Escenarios: poblacion por grupo de edad, politica de edad desconocida y tope de 20 millones')
+ON CONFLICT (version) DO NOTHING;
+
+COMMIT;
+
+-- =============================================================================
+-- 024_version_congela_parametros.sql
+-- Dominio: escenarios.
+--
+-- `scenario_versions.disease_params` guarda los parametros de la enfermedad con
+-- los que se armo la version. Hasta ahora se leian del catalogo cada vez, asi
+-- que corregir un parametro cambiaba el significado de todas las versiones
+-- viejas -- incluidas las ya aprobadas y las ya simuladas.
+--
+-- Es el mismo problema que resolvieron `population_by_age` (023) y la poblacion
+-- municipal: una version es una fotografia, no un puntero.
+--
+-- CUANDO SE CONGELA: AL SALIR DE BORRADOR
+-- Mientras la version es un borrador, los parametros son los vivos del catalogo.
+-- Es coherente con que todo lo demas de un borrador tambien se pueda cambiar: si
+-- se congelaran al crearla, un borrador que espera dos dias mientras alguien
+-- corrige el R0 se quedaria con el valor viejo, y tomar la correccion obligaria a
+-- crear otra version.
+--
+-- En el instante en que deja de ser borrador -- el envio a revision -- se
+-- congelan. Asi todo lo REVISABLE y todo lo SIMULABLE esta congelado: el trigger
+-- fn_version_aprobada (014) solo deja simular versiones aprobadas, y para estar
+-- aprobada hubo que pasar por el envio. La regla se resume en una linea:
+--
+--     editable  <->  parametros vivos
+--     congelada <->  parametros de la fotografia
+--
+-- POR QUE NO HAY CHECK QUE LO OBLIGUE
+-- Seria natural exigir "si status <> 'borrador' entonces disease_params NOT NULL",
+-- pero las versiones que ya existen salieron de borrador antes de que esta columna
+-- existiera y tienen NULL. Un CHECK normal fallaria al crearlo; uno NOT VALID
+-- dejaria pasar esas filas, pero volveria a evaluarse en cuanto algo las
+-- ACTUALICE -- y `crea_version` actualiza la version vigente para apagar su
+-- is_current, asi que versionar el escenario de demostracion reventaria. Se deja
+-- sin CHECK a proposito: quien congela es `envia_a_revision`, que es el unico
+-- camino de salida de borrador.
+--
+-- NULL significa "esta version salio de borrador antes de que existiera la
+-- fotografia". No se rellena con los parametros de hoy: eso afirmaria algo que
+-- nadie puede verificar. La pantalla lo dice cuando pasa.
+--
+-- Es idempotente.
+-- =============================================================================
+
+BEGIN;
+
+ALTER TABLE scenario_versions
+    ADD COLUMN IF NOT EXISTS disease_params JSONB;
+
+ALTER TABLE scenario_versions
+    DROP CONSTRAINT IF EXISTS ck_scenario_versions_disease_params,
+    ADD  CONSTRAINT ck_scenario_versions_disease_params CHECK (
+        disease_params IS NULL OR jsonb_typeof(disease_params) = 'object');
+
+COMMENT ON COLUMN scenario_versions.disease_params IS
+    'Parametros de la enfermedad con los que se armo esta version, congelados al salir de borrador (envio a revision). Mientras la version es borrador vale NULL y se usan los vivos de diseases.default_params, que es coherente con que un borrador se pueda cambiar. NULL en una version que ya no es borrador significa que salio de borrador antes de que existiera esta columna: no se rellena, porque afirmaria algo no verificable.';
+
+INSERT INTO schema_migrations (version, description)
+VALUES ('024', 'Escenarios: la version congela los parametros de la enfermedad al salir de borrador')
 ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

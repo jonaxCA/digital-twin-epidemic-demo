@@ -1,4 +1,6 @@
 # El sitio web corre en el mismo proceso que backend_web, asi que instala tambien sus dependencias.
 -r ../backend_web/requerimientos.txt
+# Y desde el alta de escenarios valida contra el motor, que necesita numpy.
+-r ../procesamiento/requerimientos.txt
 Flask==3.1.3
 python-dotenv==1.0.1

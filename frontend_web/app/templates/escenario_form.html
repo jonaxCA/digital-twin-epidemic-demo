@@ -1,0 +1,178 @@
+{% extends "base_app.html" %}
+{% block title %}Nuevo escenario{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Nuevo escenario</h1>
+    <p class="subtitle">
+      Al guardar se crea el escenario y su <strong>versión 1</strong> en borrador. Antes de
+      guardar, el escenario se contrasta con el motor de simulación.
+    </p>
+  </div>
+</div>
+
+{% if errores %}
+<div class="alert alert-error">
+  <ul>{% for e in errores %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div class="card form-card">
+  <form method="post">
+    <div class="field">
+      <label for="name">Nombre <span class="req">*</span></label>
+      <input type="text" id="name" name="name" maxlength="160" required
+             value="{{ valores.name or '' }}">
+      <p class="field-hint">Único por autor: no puedes tener dos escenarios con el mismo nombre.</p>
+    </div>
+
+    <div class="field">
+      <label for="description">Descripción</label>
+      <textarea id="description" name="description" maxlength="1000">{{ valores.description or '' }}</textarea>
+    </div>
+
+    <div class="field">
+      <label for="disease_id">Enfermedad <span class="req">*</span></label>
+      <select id="disease_id" name="disease_id" required>
+        <option value="">Elige una enfermedad…</option>
+        {% for e in enfermedades %}
+        <option value="{{ e.id }}" {% if valores.disease_id == e.id|string %}selected{% endif %}>
+          {{ e.name }}{% if not e.simulable %} — no simulable, faltan {{ e.faltan }} parámetros{% elif e.supuestos %} (con {{ e.supuestos }} supuestos){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+      <p class="field-hint">
+        Una enfermedad a la que le falten parámetros no se puede simular. Se capturan en
+        <a href="{{ url_for('main.enfermedades') }}">Enfermedades</a>.
+      </p>
+    </div>
+
+    <div class="field">
+      <label for="region_id">Región <span class="req">*</span></label>
+      <select id="region_id" name="region_id" required>
+        <option value="">Elige una región…</option>
+        {% for r in regiones %}
+        <option value="{{ r.id }}"
+                data-poblacion="{{ r.population or '' }}"
+                data-sin-edad="{{ r.sin_edad }}"
+                data-grupos="{{ 1 if r.grupos else 0 }}"
+                {% if valores.region_id == r.id|string %}selected{% endif %}>
+          {{ r.name }}{% if r.level == 'estado' %} (estado completo){% endif %}
+          {%- if r.population %} — {{ "{:,}".format(r.population) }} hab.{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field">
+      <label class="param-supuesto-check">
+        <input type="checkbox" id="estratificar" name="estratificar"
+               {% if valores.estratificar %}checked{% endif %}>
+        Abrir la población por grupo de edad
+      </label>
+      <p class="field-hint">
+        Usa el reparto del Censo 2020 de la región (0-19, 20-39, 40-59, 60-79, 80+), que es el
+        que la letalidad y la hospitalización por edad necesitan. <strong>La población deja de
+        ser editable:</strong> el reparto es censal y escalarlo para que cuadre con un total
+        escrito a mano lo convertiría en una invención. Si necesitas otro total, corre el
+        escenario sin estratificar.
+      </p>
+    </div>
+
+    <div class="field" id="campo-poblacion">
+      <label for="population_size">Población <span class="req">*</span></label>
+      <input type="number" id="population_size" name="population_size"
+             min="{{ limites.poblacion_min }}" max="{{ limites.poblacion_max }}" step="1"
+             value="{{ valores.population_size or '' }}">
+      <p class="field-hint">
+        Se toma de la región y se puede ajustar, entre {{ "{:,}".format(limites.poblacion_min) }}
+        y {{ "{:,}".format(limites.poblacion_max) }}.
+      </p>
+    </div>
+
+    <div class="field" id="campo-sin-edad" hidden>
+      <label>Personas sin edad declarada <span class="req">*</span></label>
+      <p class="field-hint" id="texto-sin-edad"></p>
+      {% for clave, explica in politicas.items() %}
+      <label class="param-supuesto-check">
+        <input type="radio" name="age_unknown_policy" value="{{ clave }}"
+               {% if valores.age_unknown_policy == clave %}checked{% endif %}>
+        <strong>{{ clave }}</strong> — {{ explica }}
+      </label>
+      {% endfor %}
+    </div>
+
+    <div class="field">
+      <label for="initial_infected">Infectados iniciales <span class="req">*</span></label>
+      <input type="number" id="initial_infected" name="initial_infected" min="1" step="1" required
+             value="{{ valores.initial_infected or '' }}">
+    </div>
+
+    <div class="field">
+      <label for="horizon_days">Duración en días <span class="req">*</span></label>
+      <input type="number" id="horizon_days" name="horizon_days" required
+             min="{{ limites.dias_min }}" max="{{ limites.dias_max }}" step="1"
+             value="{{ valores.horizon_days or '' }}">
+      <p class="field-hint">Entre {{ limites.dias_min }} y {{ "{:,}".format(limites.dias_max) }} días.</p>
+    </div>
+
+    <div class="field">
+      <label for="notes">Comentario de la versión 1</label>
+      <textarea id="notes" name="notes">{{ valores.notes or '' }}</textarea>
+      <p class="field-hint">Queda guardado en la versión, junto con tu usuario y la fecha.</p>
+    </div>
+
+    <div class="page-actions">
+      <a class="btn" href="{{ url_for('main.escenarios') }}">Cancelar</a>
+      <button type="submit" class="btn btn-primary">Crear escenario</button>
+    </div>
+  </form>
+</div>
+
+{# Comodidad, no validación: toma la población de la región elegida y muestra u
+   oculta la pregunta por la edad no declarada. Sin JavaScript el formulario
+   sigue sirviendo -- quien valida es el servidor. #}
+<script>
+  (function () {
+    var region = document.getElementById('region_id');
+    var estratificar = document.getElementById('estratificar');
+    var poblacion = document.getElementById('population_size');
+    var campoPoblacion = document.getElementById('campo-poblacion');
+    var campoSinEdad = document.getElementById('campo-sin-edad');
+    var textoSinEdad = document.getElementById('texto-sin-edad');
+    if (!region || !estratificar) { return; }
+
+    function elegida() {
+      return region.options[region.selectedIndex] || null;
+    }
+
+    function pinta() {
+      var opcion = elegida();
+      var tieneGrupos = opcion && opcion.dataset.grupos === '1';
+      var sinEdad = opcion ? parseInt(opcion.dataset.sinEdad || '0', 10) : 0;
+      var porEdad = estratificar.checked && tieneGrupos;
+
+      estratificar.disabled = !tieneGrupos;
+      campoPoblacion.hidden = porEdad;
+      poblacion.required = !porEdad;
+      campoSinEdad.hidden = !(porEdad && sinEdad > 0);
+      if (porEdad && sinEdad > 0) {
+        textoSinEdad.textContent = sinEdad.toLocaleString('es-MX') +
+          ' personas de esta región no declararon su edad, así que no caen en ningún grupo. ' +
+          'Elige qué hacer con ellas: la decisión queda guardada en la versión.';
+      }
+      if (!porEdad && opcion && opcion.dataset.poblacion && !poblacion.value) {
+        poblacion.value = opcion.dataset.poblacion;
+      }
+    }
+
+    region.addEventListener('change', function () {
+      var opcion = elegida();
+      if (opcion && opcion.dataset.poblacion) { poblacion.value = opcion.dataset.poblacion; }
+      pinta();
+    });
+    estratificar.addEventListener('change', pinta);
+    pinta();
+  })();
+</script>
+{% endblock %}

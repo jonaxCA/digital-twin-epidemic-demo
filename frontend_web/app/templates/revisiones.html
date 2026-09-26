@@ -1,0 +1,78 @@
+{% extends "base_app.html" %}
+{% block title %}Pendientes de revisión{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Pendientes de revisión</h1>
+    <p class="subtitle">
+      Versiones enviadas esperando dictamen, la que lleva más tiempo primero.
+      {% if puede_revisar %}
+      Solo se puede aprobar o rechazar una versión que no hayas escrito tú.
+      {% else %}
+      Aprobar o rechazar es del rol <strong>EPIDEMIOLOGO</strong>; aquí solo consultas.
+      {% endif %}
+    </p>
+  </div>
+</div>
+
+{% with mensajes = get_flashed_messages(with_categories=true) %}
+  {% for categoria, mensaje in mensajes %}
+  <div class="alert alert-{{ categoria if categoria in ('error', 'warn') else 'ok' }}">{{ mensaje }}</div>
+  {% endfor %}
+{% endwith %}
+
+<div class="card table-card">
+  <div class="tabla-scroll">
+    <table class="situacion-table catalogo-table">
+      <thead>
+        <tr>
+          <th>Escenario</th>
+          <th>Versión</th>
+          <th>Enfermedad</th>
+          <th>Región</th>
+          <th>Población</th>
+          <th>Horizonte</th>
+          <th>Intervenciones</th>
+          <th>Enviada por</th>
+          <th>Esperando desde</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in pendientes %}
+        <tr>
+          <td>
+            <a href="{{ url_for('main.escenario_detalle', scenario_id=p.scenario_id) }}">
+              <strong>{{ p.name }}</strong></a>
+          </td>
+          <td>v{{ p.version_number }}</td>
+          <td>{{ p.enfermedad }}</td>
+          <td>{{ p.region }}</td>
+          <td>{{ "{:,}".format(p.population_size) }}</td>
+          <td>{{ p.horizon_days }} días</td>
+          <td>{{ p.n_intervenciones }}</td>
+          <td>
+            {{ p.autor }}
+            {% if puede_revisar and p.created_by == current_user.sub %}
+            <div class="detalle-texto">no puedes revisarla: es tuya</div>
+            {% endif %}
+          </td>
+          <td>{{ p.submitted_at.strftime('%d/%m/%Y %H:%M') }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9" class="tabla-vacia">
+            No hay nada esperando dictamen.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tabla-footer">
+    <span class="tabla-conteo">
+      {{ pendientes|length }} versión{{ 'es' if pendientes|length != 1 }} pendiente{{ 's' if pendientes|length != 1 }}
+    </span>
+  </div>
+</div>
+{% endblock %}

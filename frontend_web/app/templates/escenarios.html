@@ -1,0 +1,103 @@
+{% extends "base_app.html" %}
+{% block title %}Escenarios{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Escenarios</h1>
+    <p class="subtitle">
+      Cada escenario se guarda por versiones: modificarlo crea la siguiente y nunca
+      sobrescribe la anterior. Solo una versión aprobada se puede simular.
+    </p>
+  </div>
+  {% if puede_crear_escenarios %}
+  <div class="page-actions">
+    <a class="btn btn-primary" href="{{ url_for('main.escenario_nuevo') }}">+ Nuevo escenario</a>
+  </div>
+  {% endif %}
+</div>
+
+{% with mensajes = get_flashed_messages(with_categories=true) %}
+  {% for categoria, mensaje in mensajes %}
+  <div class="alert alert-{{ categoria if categoria in ('error', 'warn') else 'ok' }}">{{ mensaje }}</div>
+  {% endfor %}
+{% endwith %}
+
+<form class="card filtros-card" method="get" action="{{ url_for('main.escenarios') }}">
+  <div class="field">
+    <label for="q">Búsqueda</label>
+    <input type="search" name="q" id="q" value="{{ busqueda }}"
+           placeholder="Buscar por escenario, enfermedad o región..." />
+  </div>
+  <div class="filtro-acciones">
+    <a class="btn" href="{{ url_for('main.escenarios') }}">Limpiar</a>
+    <button type="submit" class="btn btn-primary">Aplicar</button>
+  </div>
+</form>
+
+<div class="card table-card">
+  <div class="tabla-scroll">
+    <table class="situacion-table catalogo-table">
+      <thead>
+        <tr>
+          <th>Escenario</th>
+          <th>Enfermedad</th>
+          <th>Región</th>
+          <th>Versión</th>
+          <th>Estado</th>
+          <th>Población</th>
+          <th>Horizonte</th>
+          <th>Autor</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in escenarios %}
+        <tr>
+          <td>
+            <a href="{{ url_for('main.escenario_detalle', scenario_id=e.id) }}">
+              <strong>{{ e.name }}</strong></a>
+            {% if e.description %}<div class="detalle-texto">{{ e.description }}</div>{% endif %}
+          </td>
+          <td>{{ e.enfermedad }}</td>
+          <td>{{ e.region }}</td>
+          <td>{% if e.version_number %}v{{ e.version_number }}{% else %}—{% endif %}</td>
+          <td>
+            <span class="badge param-pill
+              {%- if e.version_status == 'aprobado' %} param-con-fuente
+              {%- elif e.version_status == 'rechazado' %} param-sin-fuente
+              {%- elif e.version_status == 'en_revision' %} param-supuesto
+              {%- else %} param-falta-pill{% endif %}">{{ e.version_label }}</span>
+          </td>
+          <td>
+            {% if e.population_size %}{{ "{:,}".format(e.population_size) }}{% else %}—{% endif %}
+            {% if e.por_edad %}
+            <div class="detalle-texto">
+              por grupo de edad
+              {%- if e.population_age_unknown %} · {{ "{:,}".format(e.population_age_unknown) }}
+              sin edad ({{ e.age_unknown_policy }}){% endif %}
+            </div>
+            {% endif %}
+          </td>
+          <td>{% if e.horizon_days %}{{ e.horizon_days }} días{% else %}—{% endif %}</td>
+          <td>{{ e.autor }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="tabla-vacia">
+            {% if busqueda %}
+            No hay escenarios que coincidan con «{{ busqueda }}».
+            {% else %}
+            Todavía no hay escenarios. {% if puede_crear_escenarios %}Crea el primero con
+            «Nuevo escenario».{% endif %}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tabla-footer">
+    <span class="tabla-conteo">{{ escenarios|length }} escenario{{ 's' if escenarios|length != 1 }}</span>
+  </div>
+</div>
+{% endblock %}

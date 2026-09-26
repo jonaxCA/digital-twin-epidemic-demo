@@ -58,7 +58,11 @@ CAPAS_CONTACTO_SUPUESTO = {
 }
 
 # Limites alineados con los CHECK de scenario_versions.
-POBLACION_MIN, POBLACION_MAX = 1000, 5_000_000
+# Tope alineado con ck_scenario_versions_poblacion (migracion 023). Son 20
+# millones para que quepa cualquier entidad del pais: la mas poblada es el
+# Estado de Mexico con 16,992,418 (Censo 2020). Con el tope anterior de 5
+# millones, Nuevo Leon completo (5,784,442) no se podia simular.
+POBLACION_MIN, POBLACION_MAX = 1000, 20_000_000
 DIAS_MIN, DIAS_MAX = 1, 1095
 
 # Tipo de intervencion -> capa sobre la que actua y parametro que da su fuerza.

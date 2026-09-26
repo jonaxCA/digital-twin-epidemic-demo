@@ -53,6 +53,14 @@ def inject_globals():
         # solo para mostrar u ocultar botones: el control real esta en
         # roles_required, en cada ruta.
         "puede_editar_catalogo": tiene_rol(user, "EPIDEMIOLOGO", "ADMINISTRADOR"),
+        # Quien puede dar de alta escenarios. Mismo criterio: esto solo pinta o
+        # esconde el boton, el candado real esta en roles_required.
+        "puede_crear_escenarios": tiene_rol(user, "ANALISTA", "EPIDEMIOLOGO",
+                                            "ADMINISTRADOR"),
+        # Quien decide una revision. Aprobar o rechazar es del EPIDEMIOLOGO y de
+        # nadie mas: el ADMINISTRADOR ve la bandeja, pero no dictamina.
+        "puede_revisar": tiene_rol(user, "EPIDEMIOLOGO"),
+        "ve_bandeja": tiene_rol(user, "EPIDEMIOLOGO", "ADMINISTRADOR"),
     }
 
 
@@ -535,6 +543,315 @@ def region_editar(region_id):
             "warn",
         )
     return redirect(url_for("main.regiones"))
+
+
+# ---------------------------------------------------------------------------
+# Escenarios (Bloque D) -- alta y consulta
+# ---------------------------------------------------------------------------
+# Consultar es abierto a cualquier usuario autenticado. Dar de alta es de
+# ANALISTA, EPIDEMIOLOGO y ADMINISTRADOR: el ANALISTA es quien arma y envia a
+# revision segun el flujo del bloque D.
+ROLES_ESCENARIO = ("ANALISTA", "EPIDEMIOLOGO", "ADMINISTRADOR")
+
+
+@bp.route("/escenarios")
+@login_required
+def escenarios():
+    busqueda = (request.args.get("q") or "").strip() or None
+    return render_template(
+        "escenarios.html",
+        escenarios=queries.get_escenarios(busqueda=busqueda),
+        busqueda=busqueda or "",
+        active_nav="escenarios",
+    )
+
+
+@bp.route("/escenarios/nuevo", methods=["GET", "POST"])
+@roles_required(*ROLES_ESCENARIO, entity_type="scenarios")
+def escenario_nuevo():
+    """Alta de escenario. Guardar crea el escenario y su version 1 en la misma
+    transaccion: un escenario sin version no se puede simular ni revisar.
+
+    Antes de guardar, el escenario se contrasta con el motor. Vale la pena que
+    el rechazo aparezca aqui y no al momento de correr la simulacion, que es
+    donde el bloque F lo encontraria.
+    """
+    regiones = queries.get_regiones_para_escenario()
+    enfermedades = queries.get_enfermedades_para_escenario()
+    contexto = {
+        "regiones": regiones, "enfermedades": enfermedades,
+        "limites": queries.LIMITES_ESCENARIO,
+        "politicas": queries.POLITICAS_EDAD_DESCONOCIDA,
+        "active_nav": "escenarios",
+    }
+
+    if request.method == "GET":
+        return render_template("escenario_form.html", errores=[], valores={}, **contexto)
+
+    datos, errores = queries.valida_escenario(request.form, regiones, enfermedades)
+    valores = {k: (request.form.get(k) or "") for k in
+               ("name", "description", "disease_id", "region_id", "population_size",
+                "initial_infected", "horizon_days", "age_unknown_policy", "notes")}
+    valores["estratificar"] = bool(request.form.get("estratificar"))
+
+    if not errores:
+        ok, error, scenario_id = queries.crea_escenario(datos, g.user["sub"])
+        if ok:
+            flash(f"Escenario «{datos['name']}» creado con su versión 1 en borrador.", "ok")
+            return redirect(url_for("main.escenarios"))
+        errores = [error]
+
+    return render_template("escenario_form.html", errores=errores, valores=valores,
+                           **contexto), 400
+
+
+# ---------------------------------------------------------------------------
+# Detalle de escenario e intervenciones de su version vigente
+# ---------------------------------------------------------------------------
+# Consultar el detalle es abierto. Editar las intervenciones pide tres cosas a
+# la vez: el rol, que la version siga en borrador, y ser dueno del escenario (o
+# ADMINISTRADOR). Lo primero lo hace el decorador; los otros dos se revisan
+# aqui, porque dependen de la fila y no del usuario.
+def _puede_editar(detalle):
+    """(puede, motivo). El motivo se muestra al usuario tal cual."""
+    if not detalle["version"]:
+        return False, "Este escenario no tiene una versión vigente."
+    if detalle["version"]["status"] != "borrador":
+        return False, ("Esta versión ya no es un borrador: para cambiar sus "
+                       "intervenciones hay que crear una versión nueva.")
+    if (detalle["escenario"]["owner_id"] != g.user["sub"]
+            and not tiene_rol(g.user, "ADMINISTRADOR")):
+        return False, "Solo quien creó el escenario puede editar sus intervenciones."
+    return True, None
+
+
+def _detalle_o_404(scenario_id):
+    detalle = queries.get_escenario_detalle(scenario_id)
+    if detalle is None:
+        flash("Ese escenario no existe.", "error")
+        return None
+    return detalle
+
+
+@bp.route("/escenarios/<int:scenario_id>")
+@login_required
+def escenario_detalle(scenario_id):
+    """Detalle de una version. Sin `?version=` muestra la vigente; con uno,
+    muestra esa, de solo lectura: un historial que no se puede abrir no sirve
+    para entender como llego el escenario a donde esta."""
+    pedida = request.args.get("version", type=int)
+    detalle = queries.get_escenario_detalle(scenario_id, pedida)
+    if detalle is None:
+        flash("Ese escenario o esa versión no existe.", "error")
+        return redirect(url_for("main.escenarios"))
+
+    errores_motor, avisos_motor = queries.revisa_version(detalle)
+    if detalle["editable"]:
+        puede, motivo = _puede_editar(detalle)
+    elif pedida is not None and detalle["version"] and not detalle["version"]["is_current"]:
+        puede, motivo = False, ("Estás viendo una versión anterior. Solo la vigente "
+                                "se puede editar.")
+    else:
+        puede, motivo = False, "Esta versión ya no es un borrador."
+
+    return render_template(
+        "escenario_detalle.html", **detalle,
+        versiones=queries.get_versiones(scenario_id),
+        tipos=queries.get_tipos_intervencion(),
+        errores_motor=errores_motor, avisos_motor=avisos_motor,
+        puede_editar=puede, motivo_bloqueo=motivo,
+        errores=[], valores={}, active_nav="escenarios")
+
+
+@bp.route("/escenarios/<int:scenario_id>/versiones/nueva", methods=["GET", "POST"])
+@roles_required(*ROLES_ESCENARIO, entity_type="scenario_versions")
+def version_nueva(scenario_id):
+    """Crea la version siguiente. Modificar nunca sobrescribe.
+
+    El formulario llega con los valores de la vigente, y las intervenciones se
+    copian solas: si hubiera que recapturarlas, nadie versionaria nada.
+    """
+    detalle = _detalle_o_404(scenario_id)
+    if detalle is None:
+        return redirect(url_for("main.escenarios"))
+    if not detalle["version"]:
+        flash("Ese escenario no tiene una versión de la que partir.", "error")
+        return redirect(url_for("main.escenario_detalle", scenario_id=scenario_id))
+    if (detalle["escenario"]["owner_id"] != g.user["sub"]
+            and not tiene_rol(g.user, "ADMINISTRADOR")):
+        flash("Solo quien creó el escenario puede versionarlo.", "error")
+        return redirect(url_for("main.escenario_detalle", scenario_id=scenario_id))
+
+    version = detalle["version"]
+    region = next((r for r in queries.get_regiones_para_escenario()
+                   if r["id"] == detalle["escenario"]["region_id"]), None)
+    contexto = {"escenario": detalle["escenario"], "version": version,
+                "region": region, "limites": queries.LIMITES_ESCENARIO,
+                "politicas": queries.POLITICAS_EDAD_DESCONOCIDA,
+                "active_nav": "escenarios"}
+
+    if request.method == "GET":
+        valores = {
+            "population_size": version["population_size"],
+            "initial_infected": version["initial_infected"],
+            "horizon_days": version["horizon_days"],
+            "estratificar": bool(version["population_by_age"]),
+            "age_unknown_policy": version["age_unknown_policy"] or "",
+            "notes": "",
+        }
+        return render_template("version_form.html", errores=[], valores=valores, **contexto)
+
+    datos, errores = queries.valida_version(
+        request.form, region, detalle["escenario"]["default_params"])
+    if not errores:
+        ok, error, numero = queries.crea_version(scenario_id, datos, g.user["sub"])
+        if ok:
+            flash(f"Versión {numero} creada en borrador, con las intervenciones de la "
+                  f"versión {version['version_number']} copiadas.", "ok")
+            return redirect(url_for("main.escenario_detalle", scenario_id=scenario_id))
+        errores = [error]
+
+    valores = {k: (request.form.get(k) or "") for k in
+               ("population_size", "initial_infected", "horizon_days",
+                "age_unknown_policy", "notes")}
+    valores["estratificar"] = bool(request.form.get("estratificar"))
+    return render_template("version_form.html", errores=errores, valores=valores,
+                           **contexto), 400
+
+
+@bp.route("/escenarios/<int:scenario_id>/duplicar", methods=["POST"])
+@roles_required(*ROLES_ESCENARIO, entity_type="scenarios")
+def escenario_duplicar(scenario_id):
+    """Copia una version a un escenario nuevo, del que duplica.
+
+    No pide ser dueno del original: duplicar no lo toca. El nuevo nace en
+    borrador con version 1, porque nadie ha revisado esto todavia.
+    """
+    numero = request.form.get("version", type=int)
+    ok, error, nuevo_id = queries.duplica_escenario(
+        scenario_id, numero, request.form.get("name"), g.user["sub"])
+    if ok:
+        flash("Escenario duplicado. Esta copia es tuya y empieza en borrador.", "ok")
+        return redirect(url_for("main.escenario_detalle", scenario_id=nuevo_id))
+    flash(error, "error")
+    return redirect(url_for("main.escenario_detalle", scenario_id=scenario_id))
+
+
+@bp.route("/escenarios/<int:scenario_id>/intervenciones", methods=["POST"])
+@roles_required(*ROLES_ESCENARIO, entity_type="scenario_interventions")
+def intervencion_agregar(scenario_id):
+    detalle = _detalle_o_404(scenario_id)
+    if detalle is None:
+        return redirect(url_for("main.escenarios"))
+    puede, motivo = _puede_editar(detalle)
+    if not puede:
+        flash(motivo, "error")
+        return redirect(url_for("main.escenario_detalle", scenario_id=scenario_id))
+
+    tipos = queries.get_tipos_intervencion()
+    datos, errores = queries.valida_intervencion(
+        request.form, tipos, detalle["version"], detalle["intervenciones"])
+    if not errores:
+        ok, error = queries.agrega_intervencion(
+            detalle["version"]["id"], datos, g.user["sub"])
+        if ok:
+            flash(f"Intervención «{datos['code']}» agregada a la versión "
+                  f"{detalle['version']['version_number']}.", "ok")
+            return redirect(url_for("main.escenario_detalle", scenario_id=scenario_id))
+        errores = [error]
+
+    errores_motor, avisos_motor = queries.revisa_version(detalle)
+    return render_template(
+        "escenario_detalle.html", **detalle, tipos=tipos,
+        errores_motor=errores_motor, avisos_motor=avisos_motor,
+        puede_editar=True, motivo_bloqueo=None,
+        errores=errores, valores=request.form, active_nav="escenarios"), 400
+
+
+@bp.route("/escenarios/<int:scenario_id>/intervenciones/<int:intervencion_id>/quitar",
+          methods=["POST"])
+@roles_required(*ROLES_ESCENARIO, entity_type="scenario_interventions")
+def intervencion_quitar(scenario_id, intervencion_id):
+    detalle = _detalle_o_404(scenario_id)
+    if detalle is None:
+        return redirect(url_for("main.escenarios"))
+    puede, motivo = _puede_editar(detalle)
+    if not puede:
+        flash(motivo, "error")
+    else:
+        ok, error = queries.quita_intervencion(
+            detalle["version"]["id"], intervencion_id, g.user["sub"])
+        flash("Intervención quitada." if ok else error, "ok" if ok else "error")
+    return redirect(url_for("main.escenario_detalle", scenario_id=scenario_id))
+
+
+@bp.route("/escenarios/<int:scenario_id>/intervenciones/<int:intervencion_id>/mover",
+          methods=["POST"])
+@roles_required(*ROLES_ESCENARIO, entity_type="scenario_interventions")
+def intervencion_mover(scenario_id, intervencion_id):
+    detalle = _detalle_o_404(scenario_id)
+    if detalle is None:
+        return redirect(url_for("main.escenarios"))
+    puede, motivo = _puede_editar(detalle)
+    if not puede:
+        flash(motivo, "error")
+    else:
+        ok, error = queries.mueve_intervencion(
+            detalle["version"]["id"], intervencion_id,
+            request.form.get("direccion"), g.user["sub"])
+        if not ok and error:
+            flash(error, "error")
+    return redirect(url_for("main.escenario_detalle", scenario_id=scenario_id))
+
+
+# ---------------------------------------------------------------------------
+# Flujo de aprobacion
+# ---------------------------------------------------------------------------
+# Enviar es de quien armo el escenario. Dictaminar es del EPIDEMIOLOGO, y solo
+# de el: el ADMINISTRADOR ve la bandeja pero no aprueba, porque quien opera el
+# sistema no es quien valida la epidemiologia. La base ademas impide que nadie
+# revise su propia version (ck_scenario_versions_no_autoaprobacion).
+@bp.route("/escenarios/<int:scenario_id>/enviar", methods=["POST"])
+@roles_required(*ROLES_ESCENARIO, entity_type="scenario_versions")
+def version_enviar(scenario_id):
+    detalle = _detalle_o_404(scenario_id)
+    if detalle is None:
+        return redirect(url_for("main.escenarios"))
+    if (detalle["escenario"]["owner_id"] != g.user["sub"]
+            and not tiene_rol(g.user, "ADMINISTRADOR")):
+        flash("Solo quien creó el escenario puede enviarlo a revisión.", "error")
+    else:
+        ok, error = queries.envia_a_revision(scenario_id, g.user["sub"])
+        flash("Versión enviada a revisión." if ok else error, "ok" if ok else "error")
+    return redirect(url_for("main.escenario_detalle", scenario_id=scenario_id))
+
+
+@bp.route("/escenarios/<int:scenario_id>/revisar", methods=["POST"])
+@roles_required("EPIDEMIOLOGO", entity_type="scenario_versions")
+def version_revisar(scenario_id):
+    ok, error, estado = queries.resuelve_revision(
+        scenario_id, request.form.get("decision"),
+        request.form.get("comentario"), g.user["sub"])
+    if ok:
+        # "Versión aprobado" chirría: el estado de la base es masculino y la
+        # versión es femenina, así que el mensaje usa su propia palabra.
+        if estado == "aprobado":
+            flash("Versión aprobada. Ya se puede simular.", "ok")
+        else:
+            flash("Versión rechazada. Quien la armó puede crear una versión nueva con "
+                  "las correcciones.", "ok")
+    else:
+        flash(error, "error")
+    return redirect(url_for("main.escenario_detalle", scenario_id=scenario_id))
+
+
+@bp.route("/revisiones")
+@roles_required("EPIDEMIOLOGO", "ADMINISTRADOR", entity_type="scenario_versions")
+def revisiones():
+    """Bandeja de versiones esperando dictamen, la mas antigua primero."""
+    return render_template("revisiones.html",
+                           pendientes=queries.get_pendientes_revision(),
+                           active_nav="revisiones")
 
 
 # ---------------------------------------------------------------------------

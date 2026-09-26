@@ -1,0 +1,122 @@
+{% extends "base_app.html" %}
+{% block title %}Nueva versión · {{ escenario.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Nueva versión</h1>
+    <p class="subtitle">
+      <strong>{{ escenario.name }}</strong> · {{ escenario.enfermedad }} · {{ escenario.region }}.
+      Se creará la versión {{ version.version_number + 1 }} en borrador. La versión
+      {{ version.version_number }} <strong>no se modifica</strong>: queda como está, con su
+      autor, su fecha y su comentario.
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{{ url_for('main.escenario_detalle', scenario_id=escenario.id) }}">Cancelar</a>
+  </div>
+</div>
+
+{% if errores %}
+<div class="alert alert-error">
+  <ul>{% for e in errores %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div class="alert alert-ok">
+  Las intervenciones de la versión {{ version.version_number }} se copian a la nueva.
+  Después podrás agregarlas, quitarlas o reordenarlas mientras siga en borrador.
+</div>
+
+<div class="card form-card">
+  <form method="post">
+    <div class="field">
+      <label class="param-supuesto-check">
+        <input type="checkbox" id="estratificar" name="estratificar"
+               {% if valores.estratificar %}checked{% endif %}
+               {% if not region or not region.grupos %}disabled{% endif %}>
+        Abrir la población por grupo de edad
+      </label>
+      <p class="field-hint">
+        {% if region and region.grupos %}
+        Usa el reparto del Censo 2020 de {{ region.name }}. Si lo activas, la población
+        deja de ser editable: el reparto es censal y escalarlo lo volvería una invención.
+        {% else %}
+        Esta región no tiene población por grupo de edad cargada.
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="field" id="campo-poblacion">
+      <label for="population_size">Población <span class="req">*</span></label>
+      <input type="number" id="population_size" name="population_size"
+             min="{{ limites.poblacion_min }}" max="{{ limites.poblacion_max }}" step="1"
+             value="{{ valores.population_size or '' }}">
+    </div>
+
+    {% if region and region.sin_edad %}
+    <div class="field" id="campo-sin-edad" hidden>
+      <label>Personas sin edad declarada <span class="req">*</span></label>
+      <p class="field-hint">
+        {{ "{:,}".format(region.sin_edad) }} personas de {{ region.name }} no declararon su
+        edad, así que no caen en ningún grupo. La decisión queda guardada en la versión.
+      </p>
+      {% for clave, explica in politicas.items() %}
+      <label class="param-supuesto-check">
+        <input type="radio" name="age_unknown_policy" value="{{ clave }}"
+               {% if valores.age_unknown_policy == clave %}checked{% endif %}>
+        <strong>{{ clave }}</strong> — {{ explica }}
+      </label>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="field-row">
+      <div class="field">
+        <label for="initial_infected">Infectados iniciales <span class="req">*</span></label>
+        <input type="number" id="initial_infected" name="initial_infected" min="1" step="1"
+               required value="{{ valores.initial_infected or '' }}">
+      </div>
+      <div class="field">
+        <label for="horizon_days">Duración en días <span class="req">*</span></label>
+        <input type="number" id="horizon_days" name="horizon_days" required
+               min="{{ limites.dias_min }}" max="{{ limites.dias_max }}" step="1"
+               value="{{ valores.horizon_days or '' }}">
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="notes">Qué cambia esta versión <span class="req">*</span></label>
+      <textarea id="notes" name="notes" required maxlength="1000">{{ valores.notes or '' }}</textarea>
+      <p class="field-hint">
+        Obligatorio: un historial sin el motivo de cada cambio no explica nada. Queda
+        guardado en la versión junto con tu usuario y la fecha.
+      </p>
+    </div>
+
+    <div class="page-actions">
+      <a class="btn" href="{{ url_for('main.escenario_detalle', scenario_id=escenario.id) }}">Cancelar</a>
+      <button type="submit" class="btn btn-primary">Crear versión {{ version.version_number + 1 }}</button>
+    </div>
+  </form>
+</div>
+
+{# Comodidad, no validación: estratificar oculta la población editable y saca la
+   pregunta por la edad no declarada. Sin JavaScript el formulario sigue sirviendo. #}
+<script>
+  (function () {
+    var estratificar = document.getElementById('estratificar');
+    var campoPoblacion = document.getElementById('campo-poblacion');
+    var campoSinEdad = document.getElementById('campo-sin-edad');
+    var poblacion = document.getElementById('population_size');
+    if (!estratificar) { return; }
+    function pinta() {
+      var porEdad = estratificar.checked && !estratificar.disabled;
+      campoPoblacion.hidden = porEdad;
+      poblacion.required = !porEdad;
+      if (campoSinEdad) { campoSinEdad.hidden = !porEdad; }
+    }
+    estratificar.addEventListener('change', pinta);
+    pinta();
+  })();
+</script>
+{% endblock %}
