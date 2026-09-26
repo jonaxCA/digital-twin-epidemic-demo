@@ -1,0 +1,11 @@
+| #   | Fase               | Tarea                                                                                              | Detalle en                             | Depende de        | Tamaño | Responsable | Estado    |
+| --- | ---                | ---                                                                                                | ---                                    | ---               | ---    | ---         | ---       |
+| D1  | 0. Decisiones      | Contestar las preguntas de la matriz de permisos, incluida quién consulta la auditoría             | Corrección 1; checklist, divergencia 3 | —                 | S      |             | Pendiente |
+| D2  | 0. Decisiones      | Elegir el papel del SEIR (opción A o B)                                                            | Corrección 2                           | —                 | S      |             | Pendiente |
+| D3  | 0. Decisiones      | Elegir la unidad de costo (personas-día, pesos o ambos por separado)                               | Corrección 4                           | —                 | S      |             | Pendiente |
+| D4  | 0. Decisiones      | Repartir el trabajo con escenarios entre web y escritorio                                          | Documento v2                           | —                 | S      |             | Pendiente |
+| D5  | 0. Decisiones      | Aprobar o descartar la foto de la entrada del motor                                                | Corrección 5, paso 3                   | —                 | S      |             | Pendiente |
+| D6  | 0. Decisiones      | Definir qué significa la población del escenario (habitantes, agentes, factor de escala)           | Checklist, divergencia 2               | —                 | S      |             | Pendiente |
+| D7  | 0. Decisiones      | Escribir la política de migraciones (datos contra esquema)                                         | Checklist, divergencia 4               | —                 | S      |             | Pendiente |
+| D8  | 0. Decisiones      | Fijar cuántas réplicas usa una comparación y cómo se resume                                        | Checklist, divergencia 1               | —                 | S      |             | Pendiente |
+
