@@ -20,6 +20,8 @@ sin Alembic: se ejecutan en orden y cada uno registra su aplicación en la tabla
 | `010_datos_iniciales.sql` | Roles de negocio, permisos, matriz de permisos y catálogos |
 | `019_correccion_manual_poblacion.sql` | `region_population_adjustments`: ajuste vigente de población hecho a mano por un `ADMINISTRADOR` (Bloque C, catálogo de Regiones) |
 | `020_letalidad_por_edad.sql` | Letalidad (IFR) por grupo de edad de COVID-19 e influenza, derivada de literatura publicada. La genera `datos/scripts/build_letalidad_edad.py`: no se edita a mano |
+| `021_poblacion_por_grupo_edad.sql` | `region_age_groups`: población de los 51 municipios y del estado abierta en los cinco grupos de edad del motor, más la categoría `edad_no_especificada` (Censo 2020, ITER). La genera `datos/scripts/build_grupos_edad.py`: no se edita a mano |
+| `022_poblacion_60plus_derivada.sql` | `regions.population_60plus` pasa a derivarse de `region_age_groups` con un trigger; deja de capturarse a mano |
 
 El orden importa: `005` referencia catálogos de `004`, y `007` referencia
 escenarios de `006`. No cambien la numeración.

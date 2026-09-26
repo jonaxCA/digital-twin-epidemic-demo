@@ -477,6 +477,8 @@ datos/postgres/semillas/           municipios (generado) y datos de demostracion
 
 datos/scripts/build_municipios_inegi.py  capa municipal de INEGI -> geojson del mapa + centroides
 datos/scripts/build_regiones_sql.py      censo + centroides + catalogo -> semillas/nl_municipios_completos.sql
+datos/scripts/build_grupos_edad.py       ITER -> censo/nl_estructura_edad_municipios_2020.tsv + migracion 021
+datos/scripts/build_letalidad_edad.py    literatura + censo -> migracion 020
 datos/scripts/gen_demo_data.py           generador de los datos de demostracion (semilla fija)
 datos/scripts/verifica_migraciones.py    comprueba migraciones sueltas contra el dump
 datos/geo/inegi_mg2024/      capa municipal oficial (Marco Geoestadistico 2024, ent. 19)

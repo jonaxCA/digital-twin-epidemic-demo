@@ -37,6 +37,16 @@ Cada parametro de la enfermedad puede ir como numero o con trazabilidad:
 import math
 import re
 
+# Que hacer con la gente que el censo cuenta pero sin edad declarada. No hay
+# valor por defecto a proposito: repartirla calladamente convertiria un dato
+# observado en una imputacion, y excluirla calladamente cambiaria la poblacion
+# simulada sin que nadie se entere. El escenario tiene que elegir.
+POLITICAS_EDAD_DESCONOCIDA = {
+    "excluir": "No se simula; la corrida cubre solo a la poblacion con edad conocida.",
+    "prorratear": "Se reparte entre los grupos en proporcion a su tamanio. Es una "
+                  "imputacion: queda registrada como supuesto en la trazabilidad.",
+}
+
 # Fraccion de los contactos que ocurre en cada capa. Orden de magnitud inspirado
 # en estudios de matrices de contacto tipo POLYMOD; NO esta calibrado para
 # Nuevo Leon. Solo importa cuando hay intervenciones que actuan sobre una capa.
@@ -141,10 +151,59 @@ def resolver(escenario):
     else:
         errores.append("Falta 'poblacion' (entero o diccionario por grupo de edad).")
 
+    por_edad = grupos != ["total"]
+
+    # --- Poblacion sin edad declarada ----------------------------------------
+    # El censo cuenta a quien no declaro su edad, pero no lo pone en ninguna
+    # banda (18,132 personas en Nuevo Leon). Si el escenario la trae, hay que
+    # decir que se hace con ella; el motor no elige por su cuenta.
+    sin_edad = escenario.get("poblacion_edad_desconocida", 0)
+    politica = escenario.get("politica_edad_desconocida")
+    if not (_es_numero(sin_edad) and float(sin_edad).is_integer() and sin_edad >= 0):
+        errores.append("'poblacion_edad_desconocida' debe ser un entero >= 0.")
+        sin_edad = 0
+    sin_edad = int(sin_edad)
+
+    if sin_edad and not por_edad:
+        errores.append("'poblacion_edad_desconocida' solo tiene sentido con la poblacion "
+                       "abierta por grupos de edad; sin grupos, sumala a 'poblacion'.")
+    elif sin_edad:
+        if politica not in POLITICAS_EDAD_DESCONOCIDA:
+            errores.append(
+                f"{sin_edad:,} personas sin edad declarada: elige "
+                f"'politica_edad_desconocida' entre "
+                + " o ".join(f"'{k}'" for k in POLITICAS_EDAD_DESCONOCIDA) + ".")
+        elif politica == "prorratear":
+            total_con_edad = sum(pob)
+            if total_con_edad <= 0:
+                errores.append("No se puede prorratear la edad desconocida sin poblacion "
+                               "en los grupos.")
+            else:
+                # Reparto proporcional; el sobrante por redondeo va al grupo mayor,
+                # para que el total cuadre exacto.
+                reparto = [sin_edad * n // total_con_edad for n in pob]
+                reparto[pob.index(max(pob))] += sin_edad - sum(reparto)
+                pob = [n + extra for n, extra in zip(pob, reparto)]
+                traza.append({
+                    "parametro": "poblacion_edad_desconocida",
+                    "valor": {"personas": sin_edad, "politica": politica,
+                              "reparto": dict(zip(grupos, reparto))},
+                    "fuente": None, "estado": "supuesto"})
+                avisos.append(
+                    f"{sin_edad:,} personas sin edad declarada se repartieron entre los "
+                    f"grupos en proporcion a su tamanio: es una imputacion, no dato censal.")
+        else:
+            traza.append({
+                "parametro": "poblacion_edad_desconocida",
+                "valor": {"personas": sin_edad, "politica": politica},
+                "fuente": None, "estado": "supuesto"})
+            avisos.append(
+                f"{sin_edad:,} personas sin edad declarada quedan fuera de la simulacion; "
+                f"los resultados cubren a la poblacion con edad conocida.")
+
     N = sum(pob)
     if pob and not (POBLACION_MIN <= N <= POBLACION_MAX):
         errores.append(f"La poblacion total debe estar entre {POBLACION_MIN:,} y {POBLACION_MAX:,}.")
-    por_edad = grupos != ["total"]
 
     dias = escenario.get("dias")
     if not (_es_numero(dias) and float(dias).is_integer() and DIAS_MIN <= dias <= DIAS_MAX):

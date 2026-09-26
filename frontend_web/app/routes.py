@@ -481,34 +481,31 @@ def _esperado(nombre):
 @bp.route("/regiones/<int:region_id>/editar", methods=["GET", "POST"])
 @admin_required(entity_type="regions")
 def region_editar(region_id):
-    """Correccion manual de poblacion de un municipio. Exclusiva de
+    """Correccion manual de la poblacion total de un municipio. Exclusiva de
     ADMINISTRADOR: la clave INEGI, el nombre, el nivel y el padre no se tocan
-    aqui, y el estado no se edita aparte -- se recalcula solo, como el
-    agregado de sus 51 municipios (queries.actualiza_poblacion_municipio)."""
+    aqui, y el estado no se edita aparte -- se recalcula solo, como el agregado
+    de sus 51 municipios (queries.actualiza_poblacion_municipio).
+
+    La poblacion de 60 y mas tampoco se edita: desde la migracion 022 se deriva
+    de los grupos de edad del censo. Se muestra, pero de solo lectura."""
     municipio = queries.get_region_municipio(region_id)
     if not municipio:
         flash("Ese municipio ya no existe en el catálogo.", "error")
         return redirect(url_for("main.regiones"))
 
     if request.method == "GET":
-        valores = {
-            "population": municipio["population"],
-            "population_60plus": municipio["population_60plus"],
-            "motivo": "",
-        }
+        valores = {"population": municipio["population"], "motivo": ""}
         return render_template("region_form.html", municipio=municipio, errores=[],
                                valores=valores, active_nav="regiones")
 
     population_raw = request.form.get("population")
-    population_60_raw = request.form.get("population_60plus")
     motivo = request.form.get("motivo") or ""
     esperado_population, ok_pob = _esperado("esperado_population")
-    esperado_population_60plus, ok_60 = _esperado("esperado_population_60plus")
-    valores = {"population": population_raw, "population_60plus": population_60_raw, "motivo": motivo}
+    valores = {"population": population_raw, "motivo": motivo}
 
-    poblacion, poblacion_60, errores = queries.valida_poblacion_municipio(
-        population_raw, population_60_raw, motivo)
-    if not ok_pob or not ok_60:
+    poblacion, errores = queries.valida_poblacion_municipio(
+        population_raw, motivo, municipio["population_60plus"])
+    if not ok_pob:
         errores.append("No se pudo verificar el estado del formulario. Recarga la página e intenta de nuevo.")
 
     if errores:
@@ -516,8 +513,7 @@ def region_editar(region_id):
                                valores=valores, active_nav="regiones"), 400
 
     ok, error, resultado = queries.actualiza_poblacion_municipio(
-        region_id, poblacion, poblacion_60, motivo, g.user["sub"],
-        esperado_population, esperado_population_60plus,
+        region_id, poblacion, motivo, g.user["sub"], esperado_population,
     )
     if not ok:
         return render_template("region_form.html", municipio=municipio, errores=[error],
@@ -531,14 +527,13 @@ def region_editar(region_id):
     # Si a algun municipio le falta el dato, el total del estado se queda como
     # estaba: sumarlo daria una cifra mas baja que la real y se veria como si
     # fuera el total verdadero. Se avisa en vez de publicar una suma incompleta.
-    for faltan, que in ((resultado["municipios_sin_poblacion"], "población total"),
-                        (resultado["municipios_sin_60"], "población de 60 años o más")):
-        if faltan:
-            flash(
-                f"El total de {que} de Nuevo León no se recalculó: "
-                f"{faltan} municipio(s) no tienen ese dato capturado.",
-                "warn",
-            )
+    if resultado["municipios_sin_poblacion"]:
+        flash(
+            f"El total de población de Nuevo León no se recalculó: "
+            f"{resultado['municipios_sin_poblacion']} municipio(s) no tienen ese "
+            f"dato capturado.",
+            "warn",
+        )
     return redirect(url_for("main.regiones"))
 
 

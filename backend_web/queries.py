@@ -1691,10 +1691,12 @@ ORDEN_REGIONES = {
 
 
 def _fuente_campo(reason, adjusted_at, adjusted_by_name, fuente_censal):
-    """Arma el texto de la columna Fuente para un campo (population o
-    population_60plus) de un municipio. Si hay un ajuste manual vigente, se ve
-    distinto a la fuente censal -- nunca se le atribuye a INEGI un valor que un
-    administrador corrigio."""
+    """Arma el texto de la columna Fuente de la poblacion total de un municipio.
+    Si hay un ajuste manual vigente, se ve distinto a la fuente censal -- nunca
+    se le atribuye a INEGI un valor que un administrador corrigio.
+
+    Solo aplica a `population`: el 60 y mas se deriva de region_age_groups
+    (migracion 022) y su fuente es siempre censal."""
     if reason is None:
         return {"tipo": "censal", "label": fuente_censal, "detalle": None}
     detalle = f"Corregido por {adjusted_by_name or 'un administrador'} el {_fecha_corta(adjusted_at)}: {reason}"
@@ -1718,7 +1720,10 @@ def get_estado_nl():
         "poblacion": row["population"],
         "poblacion_60": row["population_60plus"],
         "fuente_poblacion": {"tipo": "agregado", "label": "Suma de los 51 municipios", "detalle": None},
-        "fuente_poblacion_60": {"tipo": "agregado", "label": "Suma de los 51 municipios", "detalle": None},
+        "fuente_poblacion_60": {"tipo": "derivado",
+                                "label": "Grupos 60-79 y 80+ del Censo 2020",
+                                "detalle": "Se deriva de la poblacion por grupo de edad "
+                                           "del estado; no se captura ni se edita aparte."},
     }
 
 
@@ -1753,6 +1758,10 @@ def get_regiones_catalogo(busqueda=None, orden="nombre", direccion="asc"):
 
     # Una base existente puede no haber recibido aun 019. La consulta publica
     # sigue disponible con fuentes censales, sin referenciar una tabla ausente.
+    # Solo `population` puede tener ajuste manual. `population_60plus` se deriva
+    # de region_age_groups (migracion 022) y por eso no se consulta aqui: si
+    # apareciera un ajuste historico de ese campo, atribuirselo al valor actual
+    # seria mentir, porque el valor actual ya no sale de ahi.
     ajustes = {}
     tabla = query(
         "SELECT to_regclass('public.region_population_adjustments') AS nombre",
@@ -1764,7 +1773,7 @@ def get_regiones_catalogo(busqueda=None, orden="nombre", direccion="asc"):
             SELECT a.region_id, a.field, a.reason, a.adjusted_at, u.full_name
             FROM region_population_adjustments a
             LEFT JOIN users u ON u.id = a.adjusted_by
-            WHERE a.region_id = ANY(%s)
+            WHERE a.region_id = ANY(%s) AND a.field = 'population'
             """,
             ([r["id"] for r in rows],),
         )
@@ -1773,7 +1782,6 @@ def get_regiones_catalogo(busqueda=None, orden="nombre", direccion="asc"):
     municipios = []
     for r in rows:
         ajuste_pob = ajustes.get((r["id"], "population"), {})
-        ajuste_60 = ajustes.get((r["id"], "population_60plus"), {})
         municipios.append({
             "id": r["id"],
             "code": r["code"],
@@ -1784,10 +1792,9 @@ def get_regiones_catalogo(busqueda=None, orden="nombre", direccion="asc"):
                 ajuste_pob.get("reason"), ajuste_pob.get("adjusted_at"),
                 ajuste_pob.get("full_name"),
                 "INEGI, Censo 2020"),
-            "fuente_poblacion_60": _fuente_campo(
-                ajuste_60.get("reason"), ajuste_60.get("adjusted_at"),
-                ajuste_60.get("full_name"),
-                "ITER 2020 (INEGI)"),
+            "fuente_poblacion_60": {"tipo": "derivado",
+                                    "label": "Grupos 60-79 y 80+ del Censo 2020",
+                                    "detalle": "Se calcula a partir de la poblacion por grupo de edad; no se captura ni se edita aparte."},
         })
 
     return {
@@ -1817,12 +1824,14 @@ def get_region_municipio(region_id):
     )
 
 
-def valida_poblacion_municipio(population_raw, population_60_raw, motivo):
-    """Valida los tres campos del formulario de correccion. Devuelve
-    (population:int|None, population_60:int|None, errores:list). Con errores
-    no vacios, los dos primeros valores no son de fiar -- el llamador debe
-    conservar lo que la persona escribio (no lo que aqui se devuelve) para
-    volver a mostrar el formulario."""
+def valida_poblacion_municipio(population_raw, motivo, poblacion_60_actual=None):
+    """Valida los dos campos editables del formulario de correccion. Devuelve
+    (population:int|None, errores:list). Con errores no vacios el primer valor
+    no es de fiar -- el llamador debe conservar lo que la persona escribio (no
+    lo que aqui se devuelve) para volver a mostrar el formulario.
+
+    `poblacion_60_actual` es el 60 y mas derivado del municipio; solo se usa
+    para rechazar una poblacion total que quedaria por debajo de el."""
     errores = []
 
     def _entero_no_negativo(valor, etiqueta):
@@ -1840,34 +1849,42 @@ def valida_poblacion_municipio(population_raw, population_60_raw, motivo):
         return n
 
     poblacion = _entero_no_negativo(population_raw, "La población total")
-    poblacion_60 = _entero_no_negativo(population_60_raw, "La población de 60 años o más")
 
-    if poblacion is not None and poblacion_60 is not None and poblacion_60 > poblacion:
-        errores.append("La población de 60 años o más no puede ser mayor que la población total.")
+    # La poblacion de 60 y mas ya no se captura: se deriva de region_age_groups
+    # (migracion 022). Lo que si se valida es que la correccion no deje al
+    # municipio con menos habitantes que su propio grupo de 60 y mas.
+    if poblacion is not None and poblacion_60_actual is not None \
+            and poblacion < poblacion_60_actual:
+        errores.append(
+            f"La población total no puede ser menor que las {poblacion_60_actual:,} "
+            f"personas de 60 años o más que el censo registra en este municipio.")
 
     if not motivo or not motivo.strip():
         errores.append("Indica la fuente o el motivo de la corrección.")
     elif len(motivo.strip()) > 500:
         errores.append("La fuente o motivo no puede pasar de 500 caracteres.")
 
-    return poblacion, poblacion_60, errores
+    return poblacion, errores
 
 
-def actualiza_poblacion_municipio(region_id, population, population_60plus, motivo,
-                                  admin_user_id, esperado_population, esperado_population_60plus):
-    """Corrige la poblacion de un municipio. Solo la debe llamar una ruta ya
-    protegida con admin_required -- aqui no se vuelve a checar el rol.
+def actualiza_poblacion_municipio(region_id, population, motivo, admin_user_id,
+                                  esperado_population):
+    """Corrige la poblacion total de un municipio. Solo la debe llamar una ruta
+    ya protegida con admin_required -- aqui no se vuelve a checar el rol.
+
+    El 60 y mas NO se toca: desde la migracion 022 se deriva de
+    region_age_groups y lo mantiene un trigger. Corregirlo significa corregir
+    las bandas de edad, que son dato censal.
 
     Todo corre en UNA transaccion: el UPDATE de regions, el ajuste vigente en
     region_population_adjustments, el recalculo del agregado estatal y las
     entradas de audit_log se confirman juntos o no se confirma nada. Asi nunca
     queda una poblacion cambiada sin su registro de auditoria.
 
-    Control de concurrencia optimista: `esperado_population` /
-    `esperado_population_60plus` son los valores que el formulario tenia al
-    abrirse. Si ya no coinciden con lo que hay en la base (alguien mas corrigio
-    el municipio mientras se llenaba el formulario), se rechaza el guardado en
-    vez de sobreescribirlo en silencio.
+    Control de concurrencia optimista: `esperado_population` es el valor que el
+    formulario tenia al abrirse. Si ya no coincide con lo que hay en la base
+    (alguien mas corrigio el municipio mientras se llenaba el formulario), se
+    rechaza el guardado en vez de sobreescribirlo en silencio.
 
     Devuelve (ok, error, resultado). `resultado` trae el antes/despues del
     municipio y, si aplico, del estado -- para el mensaje de confirmacion.
@@ -1892,7 +1909,7 @@ def actualiza_poblacion_municipio(region_id, population, population_60plus, moti
                     return False, "Ese municipio ya no existe en el catálogo.", None
                 _, nombre, _nivel, padre_id, pob_actual, pob60_actual = fila
 
-                if pob_actual != esperado_population or pob60_actual != esperado_population_60plus:
+                if pob_actual != esperado_population:
                     return False, (
                         "Otra persona corrigió este municipio mientras editabas el "
                         "formulario. Recarga la página y vuelve a intentarlo."
@@ -1904,13 +1921,12 @@ def actualiza_poblacion_municipio(region_id, population, population_60plus, moti
                 }
 
                 cur.execute(
-                    "UPDATE regions SET population = %s, population_60plus = %s WHERE id = %s",
-                    (population, population_60plus, region_id),
+                    "UPDATE regions SET population = %s WHERE id = %s",
+                    (population, region_id),
                 )
 
                 for campo, valor_antes, valor_nuevo in (
                     ("population", pob_actual, population),
-                    ("population_60plus", pob60_actual, population_60plus),
                 ):
                     if valor_antes == valor_nuevo:
                         continue
@@ -1945,7 +1961,7 @@ def actualiza_poblacion_municipio(region_id, population, population_60plus, moti
                         _serializa(antes_municipio),
                         _serializa({
                             "id": region_id, "name": nombre,
-                            "population": population, "population_60plus": population_60plus,
+                            "population": population, "population_60plus": pob60_actual,
                             "fuente_motivo": motivo.strip(),
                         }),
                     ),
@@ -1957,34 +1973,29 @@ def actualiza_poblacion_municipio(region_id, population, population_60plus, moti
                 )
                 estado_antes_row = cur.fetchone()
 
-                # sum() ignora los NULL, asi que si a un municipio le falta el dato
-                # el agregado saldria mas bajo que el real y quedaria guardado como
-                # si fuera el total del estado. Se cuentan los faltantes y ese campo
-                # simplemente no se recalcula: mejor dejar la cifra anterior que
-                # publicar una suma incompleta.
+                # El 60 y mas del estado NO se agrega aqui: sale de sus propias
+                # bandas de edad, via el trigger de 022. Y sum() ignora los NULL,
+                # asi que si a un municipio le faltara la poblacion el total
+                # saldria mas bajo que el real y quedaria guardado como si fuera
+                # bueno; por eso se cuentan los faltantes y en ese caso no se
+                # recalcula nada.
                 cur.execute(
                     """
                     UPDATE regions e
                     SET population = CASE WHEN sub.faltan_pob = 0
-                                          THEN sub.total_pob ELSE e.population END,
-                        population_60plus = CASE WHEN sub.faltan_60 = 0
-                                                 THEN sub.total_60 ELSE e.population_60plus END
+                                          THEN sub.total_pob ELSE e.population END
                     FROM (
                         SELECT sum(population) AS total_pob,
-                               sum(population_60plus) AS total_60,
-                               count(*) FILTER (WHERE population IS NULL) AS faltan_pob,
-                               count(*) FILTER (WHERE population_60plus IS NULL) AS faltan_60
+                               count(*) FILTER (WHERE population IS NULL) AS faltan_pob
                         FROM regions WHERE parent_region_id = %s
                     ) sub
                     WHERE e.id = %s
-                    RETURNING e.population, e.population_60plus,
-                              sub.faltan_pob, sub.faltan_60
+                    RETURNING e.population, e.population_60plus, sub.faltan_pob
                     """,
                     (padre_id, padre_id),
                 )
                 estado_despues_row = cur.fetchone()
                 faltan_pob = estado_despues_row[2] if estado_despues_row else 0
-                faltan_60 = estado_despues_row[3] if estado_despues_row else 0
 
                 estado_cambio = (
                     estado_antes_row is not None and estado_despues_row is not None
@@ -2016,10 +2027,9 @@ def actualiza_poblacion_municipio(region_id, population, population_60plus, moti
         return True, None, {
             "municipio": nombre,
             "poblacion_antes": pob_actual, "poblacion_despues": population,
-            "poblacion_60_antes": pob60_actual, "poblacion_60_despues": population_60plus,
+            "poblacion_60": pob60_actual,   # derivado: no cambia por esta edicion
             "estado_actualizado": estado_cambio,
             "municipios_sin_poblacion": faltan_pob,
-            "municipios_sin_60": faltan_60,
         }
     except psycopg2.errors.UndefinedTable:
         return False, (

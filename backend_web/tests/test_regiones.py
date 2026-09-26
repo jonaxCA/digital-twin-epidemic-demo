@@ -130,24 +130,30 @@ class RegionesCatalogoTests(unittest.TestCase):
 
 class ValidacionPoblacionTests(unittest.TestCase):
     def test_valores_validos(self):
-        pob, pob60, errores = queries.valida_poblacion_municipio("1000", "200", "Fuente X")
-        self.assertEqual((pob, pob60), (1000, 200))
+        pob, errores = queries.valida_poblacion_municipio("1000", "Fuente X")
+        self.assertEqual(pob, 1000)
         self.assertEqual(errores, [])
 
     def test_rechaza_negativos(self):
-        _, _, errores = queries.valida_poblacion_municipio("-5", "1", "motivo")
+        _, errores = queries.valida_poblacion_municipio("-5", "motivo")
         self.assertTrue(any("negativa" in e for e in errores))
 
     def test_rechaza_no_numerico(self):
-        _, _, errores = queries.valida_poblacion_municipio("abc", "1", "motivo")
+        _, errores = queries.valida_poblacion_municipio("abc", "motivo")
         self.assertTrue(any("entero" in e for e in errores))
 
-    def test_rechaza_60_mayor_que_total(self):
-        _, _, errores = queries.valida_poblacion_municipio("100", "200", "motivo")
-        self.assertTrue(any("no puede ser mayor" in e for e in errores))
+    def test_rechaza_total_menor_que_el_60_derivado(self):
+        """El 60 y mas ya no se captura, pero sigue acotando por abajo: un
+        municipio no puede tener menos habitantes que sus propios mayores."""
+        _, errores = queries.valida_poblacion_municipio("100", "motivo", 200)
+        self.assertTrue(any("no puede ser menor" in e for e in errores))
+
+    def test_sin_60_derivado_no_estorba(self):
+        _, errores = queries.valida_poblacion_municipio("100", "motivo", None)
+        self.assertEqual(errores, [])
 
     def test_exige_motivo(self):
-        _, _, errores = queries.valida_poblacion_municipio("100", "50", "   ")
+        _, errores = queries.valida_poblacion_municipio("100", "   ")
         self.assertTrue(any("fuente o el motivo" in e for e in errores))
 
 
@@ -188,10 +194,9 @@ class ActualizaPoblacionMunicipioTests(unittest.TestCase):
 
     def test_correccion_exitosa_registra_ajuste_y_auditoria(self):
         nueva_pob = self.pob_original + 500
-        nueva_pob60 = self.pob60_original + 10
         ok, error, resultado = queries.actualiza_poblacion_municipio(
-            self.region_id, nueva_pob, nueva_pob60, "Conteo intercensal 2025",
-            self.admin_id, self.pob_original, self.pob60_original,
+            self.region_id, nueva_pob, "Conteo intercensal 2025",
+            self.admin_id, self.pob_original,
         )
         self.assertTrue(ok, error)
         self.assertTrue(resultado["estado_actualizado"])
@@ -201,7 +206,8 @@ class ActualizaPoblacionMunicipioTests(unittest.TestCase):
             (self.region_id,), one=True,
         )
         self.assertEqual(fila["population"], nueva_pob)
-        self.assertEqual(fila["population_60plus"], nueva_pob60)
+        # El 60 y mas es derivado: corregir la poblacion total no lo toca.
+        self.assertEqual(fila["population_60plus"], self.pob60_original)
 
         ajuste = query(
             "SELECT reason, adjusted_by, census_value FROM region_population_adjustments "
@@ -234,17 +240,16 @@ class ActualizaPoblacionMunicipioTests(unittest.TestCase):
     def test_conflicto_de_concurrencia_no_sobreescribe(self):
         # "Otra pestaña" corrige primero.
         ok1, _, _ = queries.actualiza_poblacion_municipio(
-            self.region_id, self.pob_original + 100, self.pob60_original,
-            "Primer ajuste", self.admin_id, self.pob_original, self.pob60_original,
+            self.region_id, self.pob_original + 100, "Primer ajuste",
+            self.admin_id, self.pob_original,
         )
         self.assertTrue(ok1)
 
         # La pestaña original, que cargo el formulario con los valores viejos,
         # intenta guardar tambien: debe rechazarse sin tocar la base.
         ok2, error2, _ = queries.actualiza_poblacion_municipio(
-            self.region_id, self.pob_original + 999, self.pob60_original,
-            "Segundo ajuste (deberia rechazarse)", self.admin_id,
-            self.pob_original, self.pob60_original,
+            self.region_id, self.pob_original + 999,
+            "Segundo ajuste (deberia rechazarse)", self.admin_id, self.pob_original,
         )
         self.assertFalse(ok2)
         self.assertIn("Otra persona corrigió", error2)
@@ -257,8 +262,8 @@ class ActualizaPoblacionMunicipioTests(unittest.TestCase):
         """Reproduce el escenario de 018/019: un ajuste manual vigente debe
         sobrevivir a que se vuelva a correr la correccion censal masiva."""
         ok, _, _ = queries.actualiza_poblacion_municipio(
-            self.region_id, 999999, 1000, "Ajuste de prueba", self.admin_id,
-            self.pob_original, self.pob60_original,
+            self.region_id, 999999, "Ajuste de prueba", self.admin_id,
+            self.pob_original,
         )
         self.assertTrue(ok)
 
@@ -281,21 +286,17 @@ class ActualizaPoblacionMunicipioTests(unittest.TestCase):
 
 
 class PoblacionSinDatoTests(unittest.TestCase):
-    """Un municipio puede llegar con `population_60plus` en NULL: la columna es
-    opcional y las correcciones censales masivas solo alcanzan a las filas que
-    ya existen cuando corren. Estas pruebas fijan que ese estado no rompa la
-    edicion ni corrompa el total del estado."""
+    """`population_60plus` es derivada desde la migracion 022, y `population`
+    puede faltar en una region que aun no se haya capturado. Estas pruebas fijan
+    que ninguno de los dos casos rompa la edicion ni corrompa el total estatal."""
 
     def setUp(self):
-        self._flask_request_orig = None
         import flask
         self._flask_request_orig = flask.request
         flask.request = _FakeRequest()  # type: ignore[assignment]
 
         self.admin_id = _admin_id()
         self.assertIsNotNone(self.admin_id, "seed de datos de demo no cargada (falta admin)")
-
-        # Cerralvo (el que se edita) y Villaldama (el que se deja sin dato).
         self.objetivo = query(
             "SELECT id, population, population_60plus FROM regions WHERE code = '19011'",
             one=True)
@@ -316,65 +317,42 @@ class PoblacionSinDatoTests(unittest.TestCase):
                 (fila["id"],))
         _restaura_estado()
 
-    def _vacia_60(self, region_id):
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE regions SET population_60plus = NULL WHERE id = %s", (region_id,))
-            conn.commit()
-
-    def test_se_puede_capturar_el_60_cuando_estaba_vacio(self):
-        """Antes esto era imposible: el valor esperado llegaba como None y la
-        ruta lo trataba como formulario invalido, dejando el municipio sin
-        forma de corregirse."""
-        self._vacia_60(self.objetivo["id"])
-
-        ok, error, resultado = queries.actualiza_poblacion_municipio(
-            self.objetivo["id"], self.objetivo["population"], 1207,
-            "Captura inicial desde ITER 2020", self.admin_id,
-            self.objetivo["population"], None,   # <- lo que el formulario traia: vacio
-        )
+    def test_el_60_derivado_no_lo_toca_una_correccion_de_poblacion(self):
+        """Antes las dos cifras se editaban juntas y podian quedar incoherentes.
+        Ahora el 60 y mas sale de region_age_groups y la pantalla no lo ofrece."""
+        ok, error, _ = queries.actualiza_poblacion_municipio(
+            self.objetivo["id"], self.objetivo["population"] + 1_000,
+            "Conteo intercensal 2025", self.admin_id, self.objetivo["population"])
         self.assertTrue(ok, error)
 
-        fila = query("SELECT population_60plus FROM regions WHERE id = %s",
+        fila = query("SELECT population, population_60plus FROM regions WHERE id = %s",
                      (self.objetivo["id"],), one=True)
-        self.assertEqual(fila["population_60plus"], 1207)
+        self.assertEqual(fila["population"], self.objetivo["population"] + 1_000)
+        self.assertEqual(fila["population_60plus"], self.objetivo["population_60plus"])
 
-        ajuste = query(
-            """SELECT census_value, previous_value, new_value
-               FROM region_population_adjustments
-               WHERE region_id = %s AND field = 'population_60plus'""",
-            (self.objetivo["id"],), one=True)
-        self.assertIsNotNone(ajuste, "no quedo registrado el ajuste manual")
-        self.assertEqual(ajuste["new_value"], 1207)
-        # No habia cifra censal previa: decir que era 0 seria inventarla.
-        self.assertIsNone(ajuste["census_value"])
-        self.assertIsNone(ajuste["previous_value"])
+        ajustes = query(
+            "SELECT field FROM region_population_adjustments WHERE region_id = %s",
+            (self.objetivo["id"],))
+        self.assertEqual([a["field"] for a in ajustes], ["population"],
+                         "no debe registrarse un ajuste manual de population_60plus")
 
-    def test_el_total_del_estado_no_se_recalcula_con_un_municipio_sin_dato(self):
+    def test_el_total_del_estado_no_se_recalcula_con_un_municipio_sin_poblacion(self):
         """sum() ignora los NULL. Si se recalculara igual, Nuevo Leon quedaria
         con un total mas bajo que el real y guardado como si fuera el bueno."""
-        self._vacia_60(self.vecino["id"])
-        estado_antes = query(
-            "SELECT population, population_60plus FROM regions WHERE id = %s",
-            (self.estado_id,), one=True)
+        _restaura("UPDATE regions SET population = NULL WHERE id = %s",
+                  (self.vecino["id"],))
+        estado_antes = query("SELECT population FROM regions WHERE id = %s",
+                             (self.estado_id,), one=True)["population"]
 
         ok, error, resultado = queries.actualiza_poblacion_municipio(
             self.objetivo["id"], self.objetivo["population"] + 100,
-            self.objetivo["population_60plus"], "Conteo intercensal 2025",
-            self.admin_id, self.objetivo["population"], self.objetivo["population_60plus"],
-        )
+            "Conteo intercensal 2025", self.admin_id, self.objetivo["population"])
         self.assertTrue(ok, error)
-        self.assertGreaterEqual(resultado["municipios_sin_60"], 1)
+        self.assertGreaterEqual(resultado["municipios_sin_poblacion"], 1)
 
-        estado_despues = query(
-            "SELECT population, population_60plus FROM regions WHERE id = %s",
-            (self.estado_id,), one=True)
-        # El de 60+ se queda como estaba; el total si se recalcula, porque ahi
-        # no falta ningun dato.
-        self.assertEqual(estado_despues["population_60plus"],
-                         estado_antes["population_60plus"])
-        self.assertEqual(estado_despues["population"], estado_antes["population"] + 100)
+        estado_despues = query("SELECT population FROM regions WHERE id = %s",
+                               (self.estado_id,), one=True)["population"]
+        self.assertEqual(estado_despues, estado_antes)
 
 
 if __name__ == "__main__":

@@ -14,13 +14,13 @@ MongoDB, Redis ni CUDA todavía.
 
 ## 0. Organización del equipo (antes de escribir código)
 
-- [x] El proyecto vive en **su propio repositorio** (no dentro de la carpeta de usuario)
-- [x] Asignar un responsable a cada bloque A–H
-- [x] Crear un issue por cada casilla de este documento
-- [x] Regla: una rama por issue (`feat/escenarios-versionado`, `fix/claves-inegi`, …)
-- [x] Regla: todo entra por Pull Request revisado por otro integrante, nada directo a `main`
-- [x] Regla: commits pequeños e incrementales, con el autor correcto configurado en git
-- [x] Acordar la convención de nombres de migraciones: `011_…sql`, `012_…sql`, …
+- [ ] El proyecto vive en **su propio repositorio** (no dentro de la carpeta de usuario)
+- [ ] Asignar un responsable a cada bloque A–H
+- [ ] Crear un issue por cada casilla de este documento
+- [ ] Regla: una rama por issue (`feat/escenarios-versionado`, `fix/claves-inegi`, …)
+- [ ] Regla: todo entra por Pull Request revisado por otro integrante, nada directo a `main`
+- [ ] Regla: commits pequeños e incrementales, con el autor correcto configurado en git
+- [ ] Acordar la convención de nombres de migraciones: `011_…sql`, `012_…sql`, …
 - [ ] El `.tar.gz` de entrega incluye la carpeta `.git`
 
 ---
@@ -75,7 +75,10 @@ MongoDB, Redis ni CUDA todavía.
 - [x] Migración `017_parametros_enfermedades.sql`: los parámetros quedan en el repositorio, no solo en la base de quien los capturó. Fusiona con `||` (respeta `letalidad_por_edad` y demás) y no pisa lo que alguien ya haya capturado desde la pantalla
 - [x] (Opcional, mejora) Letalidad **por grupo de edad** con fuente, en vez del promedio: COVID-19 de Verity et al. 2020 (tabla 1, verificada contra el texto completo y contra sus dos fe de erratas, que no la tocan) e influenza del CDC 2019-2020 por grupo de edad, de la misma revisión de la que salen los valores globales del catálogo. Ambas reagrupadas a los cinco grupos del motor ponderando por la estructura de edad de Nuevo León, y por eso marcadas como supuesto: el reagrupamiento es aritmética del equipo, no un dato publicado. Migración `020_letalidad_por_edad.sql`, generada por `datos/scripts/build_letalidad_edad.py`
 - [x] Corregido de paso: el motor **aceptaba** `letalidad_por_edad` pero la letalidad global le ganaba siempre, así que la tabla nunca se aplicaba. Ahora manda la tabla cuando la población viene abierta por grupos de edad
-- [ ] Población municipal por los cinco grupos de edad: hoy `regions` solo guarda total y 60+, así que un escenario municipal estratificado se rechaza porque los grupos no coinciden con los de la tabla de letalidad. El ITER 2020 que ya descargamos trae las columnas quinquenales por municipio; solo extrajimos `P_60YMAS`. **Conviene resolverlo antes del bloque D**, porque los escenarios se arman sobre municipios
+- [x] Población municipal por los cinco grupos de edad: tabla `region_age_groups` con los 51 municipios y el estado abiertos en 0-19, 20-39, 40-59, 60-79 y 80+ (migración `021`, generada por `datos/scripts/build_grupos_edad.py` desde el ITER 2020). Cada grupo es una **suma exacta** de columnas quinquenales publicadas: ningún límite queda partido, así que no hay reparto supuesto. Comprobado contra PostgreSQL: un escenario municipal estratificado que antes se rechazaba ahora valida y corre
+- [x] **Edad no especificada**: las columnas de edad del censo dejan fuera a quien no la declaró — 18,132 personas en el estado (0.31%), en 30 de los 51 municipios. No se reparten entre los grupos, porque los cinco son dato observado y prorratearlos los volvería una imputación. Van como una sexta categoría, `edad_no_especificada`, con `lower_bound` NULL para que ninguna consulta la confunda con una banda de edad. Así la suma de **todas** las filas sí cuadra con `regions.population`
+- [x] El motor exige decidir: un escenario con población sin edad declarada tiene que traer `politica_edad_desconocida` en `excluir` o `prorratear`. Prorratear se registra como **supuesto** en la trazabilidad y avisa que es una imputación; excluir avisa que los resultados cubren solo a la población con edad conocida. Sin política, el escenario no valida
+- [x] `regions.population_60plus` ya no se edita a mano: pasó a derivarse de `region_age_groups` (migración `022`), así que no puede desalinearse de las bandas de edad
 - [x] Solo `EPIDEMIOLOGO` y `ADMINISTRADOR` pueden editar (`roles_required`); el intento de un analista queda en la bitácora como `PERMISSION_DENIED`
 - [x] Auditoría de crear / editar / activar / desactivar, con estado antes y después
 
@@ -87,7 +90,9 @@ MongoDB, Redis ni CUDA todavía.
 - [x] Columnas: clave INEGI, nombre, población, población 60+, fuente
 - [x] Búsqueda y orden por población
 - [x] Sin aproximaciones: los datos vienen del bloque A
-- [x] (Opcional) Edición de población solo para `ADMINISTRADOR`, con auditoría
+- [x] (Opcional) Edición de población solo para `ADMINISTRADOR`, con auditoría — GET y POST pasan por `admin_required`, y el intento denegado queda en la bitácora
+- [x] `population_60plus` es **derivada**, no un dato capturable: la mantiene el trigger `trg_rag_sincroniza_60plus` como `grupo 60-79 + grupo 80+` de `region_age_groups` (migración `022`). La pantalla la muestra de solo lectura. Mientras las dos cifras se podían editar por separado, nada impedía que la columna y las bandas de edad se contradijeran
+- [ ] Corregir el 60 y más ahora significa corregir las bandas de edad, y para eso **no hay pantalla**. Si el equipo lo necesita, es una vista nueva sobre `region_age_groups`; si no, queda como dato censal fijo
 
 ---
 
@@ -129,6 +134,7 @@ MongoDB, Redis ni CUDA todavía.
 - [x] **Solo se simula una versión aprobada**: el trigger `fn_version_aprobada` (014) rechaza corridas sobre cualquier otro estado
 - [ ] Bandeja "Pendientes de revisión" para el epidemiólogo
 - [ ] Auditoría de envío, aprobación y rechazo
+- [ ] Que el bloque D muestre la política de edad desconocida al armar el escenario, en vez de que el valor por omisión lo ponga el código que llame al motor
 
 ---
 

@@ -201,6 +201,53 @@ class Validacion(unittest.TestCase):
         self.assertTrue(any("reduccion" in e for e in validar_escenario(esc)))
 
 
+class EdadDesconocida(unittest.TestCase):
+    """El censo cuenta a quien no declaro su edad, pero no lo pone en ninguna
+    banda. Ni repartirlo ni tirarlo puede pasar en silencio: lo primero
+    convierte dato observado en imputacion, lo segundo cambia la poblacion
+    simulada sin que nadie se entere."""
+
+    def test_exige_decidir(self):
+        esc = escenario(poblacion_edad_desconocida=500)
+        errores = validar_escenario(esc)
+        self.assertTrue(any("politica_edad_desconocida" in e for e in errores), errores)
+        self.assertTrue(any("excluir" in e and "prorratear" in e for e in errores))
+
+    def test_excluir_deja_la_poblacion_de_los_grupos(self):
+        esc = escenario(poblacion_edad_desconocida=500,
+                        politica_edad_desconocida="excluir")
+        self.assertEqual(validar_escenario(esc), [])
+        r = simular(esc, 982314)
+        self.assertEqual(r["poblacion"], 200_000)
+        self.assertTrue(any("quedan fuera de la simulacion" in a for a in r["avisos"]))
+
+    def test_prorratear_reparte_completo_y_lo_marca_como_supuesto(self):
+        esc = escenario(poblacion_edad_desconocida=500,
+                        politica_edad_desconocida="prorratear")
+        self.assertEqual(validar_escenario(esc), [])
+        r = simular(esc, 982314)
+        # Ni una persona se pierde ni se inventa por el redondeo.
+        self.assertEqual(r["poblacion"], 200_500)
+        self.assertEqual(sum(g["poblacion"] for g in r["resumen"]["desglose_por_grupo"]),
+                         200_500)
+        traza = {x["parametro"]: x for x in r["trazabilidad_parametros"]}
+        self.assertEqual(traza["poblacion_edad_desconocida"]["estado"], "supuesto")
+        self.assertEqual(sum(traza["poblacion_edad_desconocida"]["valor"]["reparto"].values()),
+                         500)
+        self.assertTrue(any("imputacion" in a for a in r["avisos"]))
+
+    def test_sin_grupos_de_edad_no_aplica(self):
+        esc = escenario(poblacion=200_000, poblacion_edad_desconocida=500,
+                        politica_edad_desconocida="excluir")
+        esc["enfermedad"]["tasa_hospitalizacion"] = 0.01
+        esc["enfermedad"]["letalidad"] = 0.001
+        self.assertTrue(any("abierta por grupos" in e for e in validar_escenario(esc)))
+
+    def test_cero_no_obliga_a_nada(self):
+        self.assertEqual(validar_escenario(escenario(poblacion_edad_desconocida=0)), [])
+        self.assertEqual(validar_escenario(escenario()), [])
+
+
 class LetalidadPorEdad(unittest.TestCase):
     """`letalidad_por_edad` existe para afinar el dato cuando la poblacion viene
     abierta por grupos. Si la tasa global lo tapara, capturarlo no serviria de

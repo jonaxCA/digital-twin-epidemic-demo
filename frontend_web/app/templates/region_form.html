@@ -24,16 +24,6 @@
        como el texto "None" y la ruta no podria verificar el formulario. #}
     <input type="hidden" name="esperado_population"
            value="{{ municipio.population if municipio.population is not none else '' }}">
-    <input type="hidden" name="esperado_population_60plus"
-           value="{{ municipio.population_60plus if municipio.population_60plus is not none else '' }}">
-
-    {% if municipio.population_60plus is none %}
-    <p class="field-hint">
-      Este municipio no tiene capturada la población de 60 años o más. Al guardar,
-      el valor que escribas queda registrado como corrección manual, no como dato
-      del censo.
-    </p>
-    {% endif %}
 
     <div class="field">
       <label for="population">Población total <span class="req">*</span></label>
@@ -43,10 +33,14 @@
     </div>
 
     <div class="field">
-      <label for="population_60plus">Población de 60 años o más <span class="req">*</span></label>
-      <input type="number" id="population_60plus" name="population_60plus" min="0" step="1" required
-             value="{{ valores.population_60plus if valores.population_60plus is not none else '' }}">
-      <p class="field-hint">No puede ser mayor que la población total.</p>
+      <label>Población de 60 años o más</label>
+      <p class="valor-derivado">
+        {% if municipio.population_60plus is not none %}{{ "{:,}".format(municipio.population_60plus) }}{% else %}—{% endif %}
+      </p>
+      <p class="field-hint">
+        No se edita: se calcula como la suma de los grupos 60-79 y 80+ del Censo 2020.
+        Para corregirlo hay que corregir esos grupos, no este campo.
+      </p>
     </div>
 
     <div class="field">

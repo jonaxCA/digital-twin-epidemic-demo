@@ -1140,6 +1140,10 @@ a { color: inherit; text-decoration: none; }
 .param-fuente-texto { font-size: 11.5px; color: var(--text-muted); font-style: italic; }
 .param-vacio { color: var(--text-muted); }
 
+/* Valor que la pantalla muestra pero no deja editar, porque se calcula
+   a partir de otro dato (p. ej. la poblacion de 60 y mas). */
+.valor-derivado { margin: 0; font-size: 18px; font-weight: 600; }
+
 /* El boton de baja/alta logica va en un <form> propio dentro de la celda de
    acciones; sin esto rompe la fila en dos renglones. */
 .form-inline { display: inline; }
