@@ -19,6 +19,11 @@ sin Alembic: se ejecutan en orden y cada uno registra su aplicación en la tabla
 | `009_roles_bd.sql` | Roles de PostgreSQL por microservicio y sus privilegios |
 | `010_datos_iniciales.sql` | Roles de negocio, permisos, matriz de permisos y catálogos |
 | `019_correccion_manual_poblacion.sql` | `region_population_adjustments`: ajuste vigente de población hecho a mano por un `ADMINISTRADOR` (Bloque C, catálogo de Regiones) |
+| `020_letalidad_por_edad.sql` | Letalidad (IFR) por grupo de edad de COVID-19 e influenza, derivada de literatura publicada. La genera `datos/scripts/build_letalidad_edad.py`: no se edita a mano |
+| `021_poblacion_por_grupo_edad.sql` | `region_age_groups`: población de los 51 municipios y del estado abierta en los cinco grupos de edad del motor, más la categoría `edad_no_especificada` (Censo 2020, ITER). La genera `datos/scripts/build_grupos_edad.py`: no se edita a mano |
+| `022_poblacion_60plus_derivada.sql` | `regions.population_60plus` pasa a derivarse de `region_age_groups` con un trigger; deja de capturarse a mano |
+| `023_escenarios_poblacion_por_edad.sql` | `scenario_versions` guarda la población por grupo de edad y la política de edad desconocida; el tope de población sube de 5 a 20 millones para que quepa el estado completo |
+| `024_version_congela_parametros.sql` | `scenario_versions.disease_params`: la versión congela los parámetros de la enfermedad al salir de borrador, para que corregir el catálogo no cambie el significado de lo ya aprobado |
 
 El orden importa: `005` referencia catálogos de `004`, y `007` referencia
 escenarios de `006`. No cambien la numeración.

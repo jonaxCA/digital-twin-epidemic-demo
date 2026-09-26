@@ -1,0 +1,81 @@
+# Poblacion por grupo de edad y municipio, Nuevo Leon. Censo 2020.
+#
+# FUENTE
+#   INEGI. Censo de Poblacion y Vivienda 2020, ITER (Principales resultados
+#   por localidad), entidad 19. Archivo iter_19_cpv2020_csv.zip de los datos
+#   abiertos del censo, descargado de:
+#   https://www.inegi.org.mx/contenidos/programas/ccpv/2020/datosabiertos/iter/
+#   sha256 del CSV de datos usado: af8c85301cffd266072c5df7308bc33f0fba2ac83625ff9e435b0e097a927670
+#
+#   Se tomaron las filas de total municipal (LOC 0000) y las 18 columnas
+#   quinquenales, agrupadas en los cinco grupos que usa el motor. Cada grupo
+#   es una suma exacta de columnas publicadas: ningun limite queda partido y
+#   no hay ningun reparto supuesto.
+#
+# EDAD NO ESPECIFICADA
+#   Las columnas de edad del ITER no suman POBTOT: quien no declaro su edad
+#   queda fuera. En Nuevo Leon son 18,132 personas
+#   (0.31%), en 30 de los 51 municipios.
+#   No se reparten entre los grupos, porque no se sabe que edad tienen; van
+#   en su propia columna para que el dato quede a la vista.
+#
+# VALIDACION, hecha al generar el archivo
+#   - los cinco grupos suman POBTOT menos la edad no especificada, en los 51;
+#   - 60-79 + 80+ coincide con P_60YMAS del ITER y con
+#     nl_poblacion_60mas_2020.tsv, en los 51;
+#   - el estado suma 5,784,442 habitantes y 654,050 de 60 y mas.
+#
+# Generado por datos/scripts/build_grupos_edad.py: no editar a mano.
+
+clave	municipio	poblacion_total	0_19	20_39	40_59	60_79	80ymas	edad_no_especificada
+001	Abasolo	2974	1071	841	732	271	57	2
+002	Agualeguas	3382	887	699	918	699	179	0
+003	Los Aldamas	1407	381	285	361	303	77	0
+004	Allende	35289	11620	10327	8642	3925	762	13
+005	Anáhuac	18030	6496	4583	4300	2203	448	0
+006	Apodaca	656464	224106	219602	171924	36836	3770	226
+007	Aramberri	14992	5231	3492	3514	2072	683	0
+008	Bustamante	3661	1211	900	876	540	129	5
+009	Cadereyta Jiménez	122337	41453	39579	28817	10709	1694	85
+010	El Carmen	104478	42220	42879	16512	2554	256	57
+011	Cerralvo	7340	2347	1973	1813	982	225	0
+012	Ciénega de Flores	68747	27014	26737	12226	2460	302	8
+013	China	9930	3103	2542	2508	1483	294	0
+014	Doctor Arroyo	36088	14069	8706	7582	4334	1312	85
+015	Doctor Coss	1360	387	301	345	268	59	0
+016	Doctor González	3256	1096	882	796	396	86	0
+017	Galeana	40903	15089	10132	9300	5019	1361	2
+018	García	397205	158069	150314	75651	11963	1074	134
+019	San Pedro Garza García	132169	30205	40332	31451	21290	4166	4725
+020	General Bravo	5506	1885	1448	1241	783	140	9
+021	General Escobedo	481213	171093	158445	119025	29459	2907	284
+022	General Terán	14109	4273	3469	3462	2358	547	0
+023	General Treviño	1808	454	415	463	382	94	0
+024	General Zaragoza	6282	2459	1591	1267	793	172	0
+025	General Zuazua	102149	40377	40185	18396	2917	245	29
+026	Guadalupe	643143	177669	189903	171703	90655	13128	85
+027	Los Herreras	1959	488	410	496	451	113	1
+028	Higueras	1386	454	345	338	209	40	0
+029	Hualahuises	7026	2237	1802	1730	994	262	1
+030	Iturbide	3298	1133	799	763	472	131	0
+031	Juárez	471523	182163	167670	102033	17428	1752	477
+032	Lampazos de Naranjo	5351	1863	1384	1255	714	135	0
+033	Linares	84666	28395	24665	20315	9250	2029	12
+034	Marín	5119	1783	1464	1233	559	79	1
+035	Melchor Ocampo	1483	405	381	392	261	44	0
+036	Mier y Noriega	7652	3245	1875	1402	860	270	0
+037	Mina	6048	2214	1719	1402	582	131	0
+038	Montemorelos	67428	21760	19611	16450	7864	1530	213
+039	Monterrey	1142994	307729	336615	296312	163060	30886	8392
+040	Parás	906	241	210	197	201	57	0
+041	Pesquería	147624	57315	62397	23442	4048	411	11
+042	Los Ramones	5389	1507	1156	1416	1076	234	0
+043	Rayones	2377	750	541	610	375	101	0
+044	Sabinas Hidalgo	34709	10801	9870	8634	4484	902	18
+045	Salinas Victoria	86766	33003	33316	16070	3796	505	76
+046	San Nicolás de los Garza	412199	95691	124806	107642	73987	10010	63
+047	Hidalgo	16086	5309	4432	4194	1799	350	2
+048	Santa Catarina	306322	95435	97319	78064	29179	3698	2627
+049	Santiago	46784	13703	12778	12118	6525	1174	486
+050	Vallecillo	1552	433	356	385	309	69	0
+051	Villaldama	3573	1022	781	934	658	175	3

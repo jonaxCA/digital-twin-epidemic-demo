@@ -1,0 +1,479 @@
+{% extends "base_app.html" %}
+{% block title %}{{ escenario.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ escenario.name }}</h1>
+    <p class="subtitle">
+      {{ escenario.enfermedad }} · {{ escenario.region }} · creado por {{ escenario.autor }}
+      {% if escenario.description %}<br>{{ escenario.description }}{% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{{ url_for('main.escenarios') }}">← Escenarios</a>
+    {% if puede_crear_escenarios and version %}
+    <a class="btn btn-primary"
+       href="{{ url_for('main.version_nueva', scenario_id=escenario.id) }}">+ Nueva versión</a>
+    {% endif %}
+  </div>
+</div>
+
+{% with mensajes = get_flashed_messages(with_categories=true) %}
+  {% for categoria, mensaje in mensajes %}
+  <div class="alert alert-{{ categoria if categoria in ('error', 'warn') else 'ok' }}">{{ mensaje }}</div>
+  {% endfor %}
+{% endwith %}
+
+{% if errores %}
+<div class="alert alert-error">
+  <ul>{% for e in errores %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if not version %}
+<div class="alert alert-error">Este escenario no tiene una versión vigente.</div>
+{% else %}
+
+{% if not version.is_current %}
+<div class="alert alert-warn">
+  Estás viendo la <strong>versión {{ version.version_number }}</strong>, que ya no es la
+  vigente. Es solo de lectura.
+  <a href="{{ url_for('main.escenario_detalle', scenario_id=escenario.id) }}">Ver la versión vigente</a>.
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="detalle-titulo">
+    Versión {{ version.version_number }}
+    <span class="badge param-pill
+      {%- if version.status == 'aprobado' %} param-con-fuente
+      {%- elif version.status == 'rechazado' %} param-sin-fuente
+      {%- elif version.status == 'en_revision' %} param-supuesto
+      {%- else %} param-falta-pill{% endif %}">{{ version.status }}</span>
+  </div>
+  <ul class="detalle-lista">
+    <li><span>Población</span><span>{{ "{:,}".format(version.population_size) }}</span></li>
+    {% if version.population_by_age %}
+    <li><span>Por grupo de edad</span><span>
+      {% for grupo, n in version.population_by_age.items() %}{{ grupo }}: {{ "{:,}".format(n) }}{% if not loop.last %} · {% endif %}{% endfor %}
+    </span></li>
+    {% endif %}
+    {% if version.population_age_unknown %}
+    <li><span>Sin edad declarada</span><span>
+      {{ "{:,}".format(version.population_age_unknown) }} — política: <strong>{{ version.age_unknown_policy }}</strong>
+    </span></li>
+    {% endif %}
+    <li><span>Horizonte</span><span>{{ version.horizon_days }} días</span></li>
+    <li><span>Infectados iniciales</span><span>{{ "{:,}".format(version.initial_infected) }}</span></li>
+    <li><span>Creada por</span><span>{{ version.autor }} · {{ version.created_at.strftime('%d/%m/%Y %H:%M') }}</span></li>
+    {% if version.notes %}<li><span>Comentario</span><span>{{ version.notes }}</span></li>{% endif %}
+    {% if version.submitted_at %}
+    <li><span>Enviada a revisión</span><span>{{ version.submitted_at.strftime('%d/%m/%Y %H:%M') }}</span></li>
+    {% endif %}
+    {% if version.reviewed_at %}
+    <li><span>{{ 'Aprobada' if version.status == 'aprobado' else 'Rechazada' }} por</span>
+        <span>{{ version.revisor }} · {{ version.reviewed_at.strftime('%d/%m/%Y %H:%M') }}</span></li>
+    {% if version.review_comment %}
+    <li><span>Motivo del dictamen</span><span>{{ version.review_comment }}</span></li>
+    {% endif %}
+    {% endif %}
+    <li>
+      <span>Parámetros de {{ escenario.enfermedad }}</span>
+      <span>
+        {% if parametros_congelados %}
+        <span class="badge param-pill param-con-fuente">congelados</span>
+        los de esta versión, no los del catálogo de hoy
+        {% elif version.status == 'borrador' %}
+        <span class="badge param-pill param-falta-pill">vivos</span>
+        los del catálogo; se congelan al enviar a revisión
+        {% else %}
+        <span class="badge param-pill param-supuesto">sin fotografía</span>
+        {% endif %}
+      </span>
+    </li>
+  </ul>
+</div>
+
+{% if parametros_sin_congelar %}
+<div class="alert alert-warn">
+  <strong>Esta versión no guardó los parámetros de la enfermedad.</strong> Salió de borrador
+  antes de que la versión los congelara, así que lo que se muestra son los del catálogo de
+  hoy: si alguien los corrigió desde entonces, este resultado ya no se explica solo con lo
+  que ves. Las versiones nuevas sí los congelan al enviarse a revisión.
+</div>
+{% endif %}
+
+{% if version.status == 'rechazado' %}
+<div class="alert alert-error">
+  <strong>Esta versión fue rechazada.</strong> No se modifica: para atender el motivo hay que
+  crear una versión nueva, que nace en borrador con las intervenciones copiadas.
+</div>
+{% elif version.status == 'aprobado' %}
+<div class="alert alert-ok">
+  <strong>Versión aprobada:</strong> es la única forma de que se pueda simular — lo impone el
+  trigger <code>fn_version_aprobada</code> en la base, no la pantalla.
+</div>
+{% endif %}
+
+{% if version.is_current and version.status == 'borrador' and puede_crear_escenarios %}
+<div class="card form-card">
+  <div class="detalle-titulo">Enviar a revisión</div>
+  <form method="post" action="{{ url_for('main.version_enviar', scenario_id=escenario.id) }}">
+    <p class="field-hint">
+      Al enviarla deja de ser editable. Antes de aceptarla se vuelve a contrastar con el
+      motor: mandar a revisar algo que no se puede simular le hace perder el tiempo a quien
+      revisa.
+    </p>
+    <div class="page-actions">
+      <button type="submit" class="btn btn-primary"
+              {% if errores_motor %}disabled{% endif %}>Enviar a revisión</button>
+    </div>
+    {% if errores_motor %}
+    <p class="field-hint">Corrige primero lo que el motor rechaza.</p>
+    {% endif %}
+  </form>
+</div>
+{% endif %}
+
+{% if version.is_current and version.status == 'en_revision' %}
+{% if puede_revisar and version.created_by != current_user.sub %}
+<div class="card form-card">
+  <div class="detalle-titulo">Dictamen</div>
+  <form method="post" action="{{ url_for('main.version_revisar', scenario_id=escenario.id) }}">
+    <div class="field">
+      <label for="comentario">Motivo</label>
+      <textarea id="comentario" name="comentario" maxlength="1000"></textarea>
+      <p class="field-hint">
+        Obligatorio para rechazar — lo exige el CHECK de la base y es lo único que tiene
+        quien va a corregir. Opcional para aprobar.
+      </p>
+    </div>
+    <div class="page-actions">
+      <button type="submit" name="decision" value="rechazar" class="btn">Rechazar</button>
+      <button type="submit" name="decision" value="aprobar" class="btn btn-primary">Aprobar</button>
+    </div>
+  </form>
+</div>
+{% else %}
+<div class="alert alert-warn">
+  Esta versión está esperando dictamen.
+  {% if puede_revisar %}
+  No puedes revisarla porque la escribiste tú: la revisión la hace otra persona, y la base
+  lo impide con <code>ck_scenario_versions_no_autoaprobacion</code>.
+  {% else %}
+  Aprobar o rechazar es del rol <strong>EPIDEMIOLOGO</strong>.
+  {% endif %}
+</div>
+{% endif %}
+{% endif %}
+
+{% if errores_motor %}
+<div class="alert alert-error">
+  <strong>El motor no puede correr esta versión:</strong>
+  <ul>{% for e in errores_motor %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% else %}
+<div class="alert alert-ok">El motor acepta esta versión: se puede simular tal como está.</div>
+{% endif %}
+
+{% if avisos_motor %}
+<div class="alert alert-warn">
+  <strong>Avisos del motor</strong> — la corrida se hace, pero no exactamente como se pidió:
+  <ul>{% for a in avisos_motor %}<li>{{ a }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div class="card table-card">
+  <div class="detalle-titulo">Intervenciones ({{ intervenciones|length }})</div>
+
+  {% if intervenciones %}
+  {# Linea de tiempo: cada barra va del dia de inicio al de fin sobre el
+     horizonte de la version. Sin fin declarado, la barra llega al final. #}
+  <div class="linea-tiempo">
+    {% for i in intervenciones %}
+    {% set fin = i.end_day if i.end_day is not none else version.horizon_days %}
+    <div class="lt-fila">
+      <div class="lt-etiqueta">{{ i.name }}</div>
+      <div class="lt-pista">
+        <div class="lt-barra"
+             style="left: {{ (100.0 * i.start_day / version.horizon_days)|round(2) }}%;
+                    width: {{ (100.0 * ((fin - i.start_day) or 1) / version.horizon_days)|round(2) }}%;"
+             title="Día {{ i.start_day }} al {{ fin }}">
+          <span>{{ i.start_day }}–{{ fin }}</span>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+    <div class="lt-fila lt-eje">
+      <div class="lt-etiqueta"></div>
+      <div class="lt-pista">
+        <span class="lt-marca lt-marca-ini">día 0</span>
+        <span class="lt-marca lt-marca-fin">día {{ version.horizon_days }}</span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="tabla-scroll">
+    <table class="situacion-table catalogo-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Tipo</th>
+          <th>Capa</th>
+          <th>Días</th>
+          <th>Cobertura</th>
+          <th>Cumplimiento</th>
+          <th>Parámetros</th>
+          {% if puede_editar %}<th>Acciones</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for i in intervenciones %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td><strong>{{ i.name }}</strong><div class="detalle-texto">{{ i.code }}</div></td>
+          <td>{{ i.target_layer or '—' }}</td>
+          <td>{{ i.start_day }}{% if i.end_day is not none %}–{{ i.end_day }}{% else %} → fin{% endif %}</td>
+          <td>{% if i.coverage is not none %}{{ "{:.0%}".format(i.coverage) }}{% else %}100%{% endif %}</td>
+          <td>{% if i.compliance is not none %}{{ "{:.0%}".format(i.compliance) }}{% else %}100%{% endif %}</td>
+          <td>
+            {% if i.params %}
+              {% for k, v in i.params.items() %}<div class="detalle-texto">{{ k }}: {{ v }}</div>{% endfor %}
+            {% else %}<span class="param-vacio">—</span>{% endif %}
+          </td>
+          {% if puede_editar %}
+          <td>
+            <form class="form-inline" method="post"
+                  action="{{ url_for('main.intervencion_mover', scenario_id=escenario.id, intervencion_id=i.id) }}">
+              <input type="hidden" name="direccion" value="subir">
+              <button class="btn btn-mini" type="submit" title="Subir"
+                      {% if loop.first %}disabled{% endif %}>↑</button>
+            </form>
+            <form class="form-inline" method="post"
+                  action="{{ url_for('main.intervencion_mover', scenario_id=escenario.id, intervencion_id=i.id) }}">
+              <input type="hidden" name="direccion" value="bajar">
+              <button class="btn btn-mini" type="submit" title="Bajar"
+                      {% if loop.last %}disabled{% endif %}>↓</button>
+            </form>
+            <form class="form-inline" method="post"
+                  action="{{ url_for('main.intervencion_quitar', scenario_id=escenario.id, intervencion_id=i.id) }}">
+              <button class="btn btn-mini" type="submit">Quitar</button>
+            </form>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="{{ 8 if puede_editar else 7 }}" class="tabla-vacia">
+            Esta versión todavía no tiene intervenciones: la corrida sería el escenario
+            sin ninguna medida.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if puede_editar %}
+<div class="card form-card">
+  <div class="detalle-titulo">Agregar intervención</div>
+  <form method="post"
+        action="{{ url_for('main.intervencion_agregar', scenario_id=escenario.id) }}">
+    <div class="field">
+      <label for="code">Tipo <span class="req">*</span></label>
+      <select id="code" name="code" required>
+        <option value="">Elige un tipo…</option>
+        {% for t in tipos %}
+        <option value="{{ t.code }}" {% if valores.get('code') == t.code %}selected{% endif %}>
+          {{ t.name }}{% if t.target_layer %} — capa {{ t.target_layer }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="start_day">Día de inicio <span class="req">*</span></label>
+        <input type="number" id="start_day" name="start_day" min="0"
+               max="{{ version.horizon_days }}" step="1" required
+               value="{{ valores.get('start_day') or '' }}">
+      </div>
+      <div class="field">
+        <label for="end_day">Día de fin</label>
+        <input type="number" id="end_day" name="end_day" min="0"
+               max="{{ version.horizon_days }}" step="1"
+               value="{{ valores.get('end_day') or '' }}">
+        <p class="field-hint">Vacío = hasta el final del horizonte ({{ version.horizon_days }}).</p>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="coverage">Cobertura</label>
+        <input type="number" id="coverage" name="coverage" min="0" max="1" step="0.01"
+               value="{{ valores.get('coverage') or '' }}">
+        <p class="field-hint">0 a 1. Vacío = 1 (toda la población objetivo).</p>
+      </div>
+      <div class="field">
+        <label for="compliance">Cumplimiento</label>
+        <input type="number" id="compliance" name="compliance" min="0" max="1" step="0.01"
+               value="{{ valores.get('compliance') or '' }}">
+        <p class="field-hint">0 a 1. Vacío = 1.</p>
+      </div>
+    </div>
+
+    {# Un bloque de parámetros por tipo, generado desde su param_schema. Los
+       nombres llevan el código del tipo porque varios comparten el parámetro
+       «reduccion» y si no se mezclarían. Los bloques que no corresponden al tipo
+       elegido se deshabilitan: oculto no basta, un campo oculto sí se envía. #}
+    {% for t in tipos %}
+    <fieldset class="params-tipo" data-code="{{ t.code }}" hidden disabled>
+      <legend>Parámetros de {{ t.name }}</legend>
+      {% if t.description %}<p class="field-hint">{{ t.description }}</p>{% endif %}
+      {% for clave, spec in (t.param_schema.get('properties') or {}).items() %}
+      <div class="field">
+        <label for="p_{{ t.code }}_{{ clave }}">
+          {{ clave }}
+          {% if clave in (t.param_schema.get('required') or []) %}<span class="req">*</span>{% endif %}
+        </label>
+        {% if spec.get('enum') %}
+        <select id="p_{{ t.code }}_{{ clave }}" name="p_{{ t.code }}_{{ clave }}">
+          <option value="">—</option>
+          {% for opcion in spec.enum %}
+          <option value="{{ opcion }}"
+                  {% if valores.get('p_' ~ t.code ~ '_' ~ clave) == opcion %}selected{% endif %}>{{ opcion }}</option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <input type="{{ 'number' if spec.get('type') in ('number', 'integer') else 'text' }}"
+               id="p_{{ t.code }}_{{ clave }}" name="p_{{ t.code }}_{{ clave }}"
+               {% if spec.get('minimum') is not none %}min="{{ spec.minimum }}"{% endif %}
+               {% if spec.get('maximum') is not none %}max="{{ spec.maximum }}"{% endif %}
+               step="{{ 1 if spec.get('type') == 'integer' else 'any' }}"
+               value="{{ valores.get('p_' ~ t.code ~ '_' ~ clave) or (spec.get('default') if spec.get('default') is not none else '') }}">
+        {% endif %}
+        <p class="field-hint">
+          {{ spec.get('type') or 'texto' }}
+          {%- if spec.get('minimum') is not none %} · mínimo {{ spec.minimum }}{% endif %}
+          {%- if spec.get('maximum') is not none %} · máximo {{ spec.maximum }}{% endif %}
+          {%- if spec.get('default') is not none %} · por omisión {{ spec.default }}{% endif %}
+        </p>
+      </div>
+      {% endfor %}
+    </fieldset>
+    {% endfor %}
+
+    <div class="page-actions">
+      <button type="submit" class="btn btn-primary">Agregar intervención</button>
+    </div>
+  </form>
+</div>
+
+<script>
+  (function () {
+    var select = document.getElementById('code');
+    var bloques = Array.prototype.slice.call(document.querySelectorAll('.params-tipo'));
+    if (!select) { return; }
+    function pinta() {
+      bloques.forEach(function (b) {
+        var toca = b.dataset.code === select.value;
+        b.hidden = !toca;
+        b.disabled = !toca;      // un fieldset deshabilitado no envía sus campos
+      });
+    }
+    select.addEventListener('change', pinta);
+    pinta();
+  })();
+</script>
+{% elif motivo_bloqueo %}
+<div class="alert alert-warn">{{ motivo_bloqueo }}</div>
+{% endif %}
+
+<div class="card table-card">
+  <div class="detalle-titulo">Historial de versiones ({{ versiones|length }})</div>
+  <p class="field-hint" style="padding: 0 16px;">
+    Modificar un escenario nunca sobrescribe: crea la versión siguiente. Cada una guarda
+    quién la hizo, cuándo, con qué comentario y con qué parámetros.
+  </p>
+  <div class="tabla-scroll">
+    <table class="situacion-table catalogo-table">
+      <thead>
+        <tr>
+          <th>Versión</th>
+          <th>Estado</th>
+          <th>Población</th>
+          <th>Horizonte</th>
+          <th>Infectados</th>
+          <th>Intervenciones</th>
+          <th>Autor y fecha</th>
+          <th>Comentario</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in versiones %}
+        <tr>
+          <td>
+            <a href="{{ url_for('main.escenario_detalle', scenario_id=escenario.id, version=v.version_number) }}">
+              <strong>v{{ v.version_number }}</strong></a>
+            {% if v.is_current %}<div class="detalle-texto">vigente</div>{% endif %}
+          </td>
+          <td>
+            <span class="badge param-pill
+              {%- if v.status == 'aprobado' %} param-con-fuente
+              {%- elif v.status == 'rechazado' %} param-sin-fuente
+              {%- elif v.status == 'en_revision' %} param-supuesto
+              {%- else %} param-falta-pill{% endif %}">{{ v.status }}</span>
+          </td>
+          <td>
+            {{ "{:,}".format(v.population_size) }}
+            {% if v.por_edad %}<div class="detalle-texto">por grupo de edad</div>{% endif %}
+          </td>
+          <td>{{ v.horizon_days }} días</td>
+          <td>{{ "{:,}".format(v.initial_infected) }}</td>
+          <td>{{ v.n_intervenciones }}</td>
+          <td>{{ v.autor }}<div class="detalle-texto">{{ v.created_at.strftime('%d/%m/%Y %H:%M') }}</div></td>
+          <td>{% if v.notes %}{{ v.notes }}{% else %}<span class="param-vacio">—</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if puede_crear_escenarios and version %}
+<div class="card form-card">
+  <div class="detalle-titulo">Duplicar</div>
+  <form method="post" action="{{ url_for('main.escenario_duplicar', scenario_id=escenario.id) }}">
+    <p class="field-hint">
+      Crea un escenario nuevo a partir de una versión de este, con sus intervenciones. La
+      copia es tuya y empieza en borrador: no hereda el estado de aprobación, porque nadie
+      la ha revisado. Este escenario no se toca.
+    </p>
+    <div class="field-row">
+      <div class="field">
+        <label for="dup_version">Versión de origen</label>
+        <select id="dup_version" name="version">
+          {% for v in versiones %}
+          <option value="{{ v.version_number }}" {% if v.is_current %}selected{% endif %}>
+            v{{ v.version_number }} — {{ v.status }}{% if v.is_current %} (vigente){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="dup_name">Nombre del escenario nuevo <span class="req">*</span></label>
+        <input type="text" id="dup_name" name="name" maxlength="160" required
+               value="{{ escenario.name }} (copia)">
+      </div>
+    </div>
+    <div class="page-actions">
+      <button type="submit" class="btn">Duplicar</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}

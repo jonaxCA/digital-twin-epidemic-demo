@@ -24,6 +24,10 @@
         <li><a href="{{ url_for('main.mapa') }}" class="{{ 'active' if active_nav == 'mapa' else '' }}"><span class="nav-icon">🗺</span> Mapa epidemiológico</a></li>
         <li><a href="{{ url_for('main.enfermedades') }}" class="{{ 'active' if active_nav == 'enfermedades' else '' }}"><span class="nav-icon">☉</span> Enfermedades</a></li>
         <li><a href="{{ url_for('main.regiones') }}" class="{{ 'active' if active_nav == 'regiones' else '' }}"><span class="nav-icon">📍</span> Regiones</a></li>
+        <li><a href="{{ url_for('main.escenarios') }}" class="{{ 'active' if active_nav == 'escenarios' else '' }}"><span class="nav-icon">⌥</span> Escenarios</a></li>
+        {% if ve_bandeja %}
+        <li><a href="{{ url_for('main.revisiones') }}" class="{{ 'active' if active_nav == 'revisiones' else '' }}"><span class="nav-icon">✓</span> Revisiones</a></li>
+        {% endif %}
         <li class="nav-divider"></li>
 	{% if es_admin %}
 	<li><a href="{{ url_for('main.usuarios') }}" class="{{ 'active' if active_nav == 'usuarios' else '' }}"><span class="nav-icon">👤</span> Usuarios</a></li>

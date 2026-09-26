@@ -115,16 +115,16 @@ class RegionesRutasTests(unittest.TestCase):
             resp_get = client.get(f"/regiones/{self.region_id}/editar")
             self.assertEqual(resp_get.status_code, 200)
 
+            # El formulario ya no trae el 60 y mas; se muestra de solo lectura.
+            self.assertNotIn(b'name="population_60plus"', resp_get.data)
+
             nueva_pob = self.pob_original + 321
-            nueva_pob60 = self.pob60_original + 5
             resp = client.post(
                 f"/regiones/{self.region_id}/editar",
                 data={
                     "population": str(nueva_pob),
-                    "population_60plus": str(nueva_pob60),
                     "motivo": "Prueba automatizada de corrección",
                     "esperado_population": str(self.pob_original),
-                    "esperado_population_60plus": str(self.pob60_original),
                 },
                 follow_redirects=True,
             )
@@ -136,26 +136,27 @@ class RegionesRutasTests(unittest.TestCase):
                 (self.region_id,), one=True,
             )
             self.assertEqual(fila["population"], nueva_pob)
-            self.assertEqual(fila["population_60plus"], nueva_pob60)
+            # Derivado de region_age_groups: una correccion de poblacion no lo mueve.
+            self.assertEqual(fila["population_60plus"], self.pob60_original)
 
             resp_listado = client.get("/regiones")
             self.assertIn("Corrección manual".encode(), resp_listado.data)
 
     def test_admin_datos_invalidos_no_cambian_nada_y_muestran_error(self):
+        """Una poblacion total por debajo del 60 y mas del propio municipio es
+        imposible, y el 60 y mas ya no se puede "arreglar" bajandolo."""
         with self.app.test_client() as client:
             self._login(client, "admin", "Admin2026!")
             resp = client.post(
                 f"/regiones/{self.region_id}/editar",
                 data={
                     "population": "100",
-                    "population_60plus": "999",  # mayor que el total: invalido
                     "motivo": "motivo cualquiera",
                     "esperado_population": str(self.pob_original),
-                    "esperado_population_60plus": str(self.pob60_original),
                 },
             )
             self.assertEqual(resp.status_code, 400)
-            self.assertIn("no puede ser mayor".encode(), resp.data)
+            self.assertIn("no puede ser menor".encode(), resp.data)
 
             fila = query("SELECT population FROM regions WHERE id = %s", (self.region_id,), one=True)
             self.assertEqual(fila["population"], self.pob_original)

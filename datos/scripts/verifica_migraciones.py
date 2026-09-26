@@ -11,12 +11,12 @@ aqui, porque entonces correrian dos veces y en el orden equivocado.
 import pathlib
 import sys
 
-# nombre de archivo -> por que no esta (ni debe estar) en el dump
-FUERA_DEL_DUMP = {
-    "018_correccion_poblacion_51_municipios.sql":
-        "depende de semillas/nl_municipios_completos.sql, que se carga despues "
-        "del dump (ver docs/INSTALACION.md, Paso 2)",
-}
+# nombre de archivo -> por que no esta (ni debe estar) en el dump.
+# Hoy esta vacio: todas las migraciones viven dentro del dump. Se agrega una
+# entrada solo cuando una migracion dependa de algo que el dump todavia no
+# cargo, con el motivo escrito, para que el que la lea sepa por que se corre
+# aparte y no la meta al dump "para emparejar".
+FUERA_DEL_DUMP = {}
 
 base = pathlib.Path("datos/postgres")
 dump = (base / "dump_completo.sql").read_text(encoding="utf-8").replace("\r\n", "\n")

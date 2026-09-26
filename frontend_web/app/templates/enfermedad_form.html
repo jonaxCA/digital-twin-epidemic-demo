@@ -107,8 +107,15 @@
         edita y que se conservan tal cual, porque pertenecen al contrato con el motor de
         agentes que viene en la siguiente etapa:</p>
       <ul class="detalle-lista">
-        {% for etiqueta, valor in parametros.informativos %}
-        <li><span>{{ etiqueta }}</span><span>{{ valor }}</span></li>
+        {% for p in parametros.informativos %}
+        <li>
+          <span>{{ p.etiqueta }}{% if p.supuesto %}
+            <span class="badge param-pill param-supuesto">supuesto</span>{% endif %}</span>
+          <span>{{ p.texto }}</span>
+        </li>
+        {% if p.fuente %}
+        <li class="param-fuente-fila"><span></span><span class="param-fuente-texto">{{ p.fuente }}</span></li>
+        {% endif %}
         {% endfor %}
       </ul>
     </div>
